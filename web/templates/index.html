@@ -1,0 +1,1428 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI视频分析助手</title>
+    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/js/pages/knowledge/styles/knowledge.css">
+</head>
+<body>
+    <div class="main-wrapper">
+        <!-- Top Navigation -->
+        <nav class="navbar">
+            <div class="navbar-inner">
+                <div class="logo">
+                    <div class="logo-icon">🤖</div>
+                    <span>VideoMind</span>
+                </div>
+                <div class="nav-links">
+                    <button class="nav-link active" data-page="home">首页</button>
+                    <button class="nav-link" data-page="videos">我的视频</button>
+                    <button class="nav-link" data-page="knowledge">知识库</button>
+                </div>
+                <div class="nav-right">
+                    <!-- 导航栏可放其他元素 -->
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Home Page -->
+            <div class="page active" id="page-home">
+                <!-- 欢迎区域 -->
+                <div class="home-welcome">
+                    <div class="welcome-text">
+                        <h1 class="welcome-title" id="welcomeTitle">加载中...</h1>
+                        <p class="welcome-subtitle">欢迎使用 VideoMind 智能视频分析平台</p>
+                    </div>
+                    <div class="quick-actions">
+                        <button class="action-card" onclick="switchPage('videos')">
+                            <div class="action-icon">📤</div>
+                            <span>上传视频</span>
+                        </button>
+                        <button class="action-card" onclick="switchPage('knowledge')">
+                            <div class="action-icon">📚</div>
+                            <span>知识库</span>
+                        </button>
+                        <button class="action-card" id="btnViewTasks">
+                            <div class="action-icon">📋</div>
+                            <span>任务中心</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 数据概览卡片 -->
+                <div class="stats-grid dashboard-stats">
+                    <div class="stat-card">
+                        <div class="stat-icon blue">📹</div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="stat-videos">0</div>
+                            <div class="stat-label">视频文件</div>
+                            <div class="stat-detail" id="stat-videos-today">今日新增 0</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon green">⏱️</div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="stat-duration">0h</div>
+                            <div class="stat-label">处理时长</div>
+                            <div class="stat-detail" id="stat-transcribed">已转录 0h</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon purple">📄</div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="stat-documents">0</div>
+                            <div class="stat-label">文档数量</div>
+                            <div class="stat-detail" id="stat-docs-today">今日生成 0</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon orange">📊</div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="stat-tasks-pending">0</div>
+                            <div class="stat-label">进行中任务</div>
+                            <div class="stat-detail" id="stat-tasks-info">已完成 0 / 失败 0</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 内容分析图表区域 -->
+                <div class="charts-section">
+                    <h2 class="section-title">数据分析</h2>
+                    <div class="charts-grid">
+                        <div class="chart-card">
+                            <div class="chart-header">
+                                <h3>视频分类分布</h3>
+                            </div>
+                            <div class="chart-body">
+                                <canvas id="distributionChart"></canvas>
+                            </div>
+                        </div>
+                        <div class="chart-card">
+                            <div class="chart-header">
+                                <h3>每日处理量趋势</h3>
+                                <div class="chart-controls">
+                                    <button class="chart-btn active" data-days="7">7天</button>
+                                    <button class="chart-btn" data-days="30">30天</button>
+                                </div>
+                            </div>
+                            <div class="chart-body">
+                                <canvas id="trendsChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 最近活动区域 -->
+                <div class="recent-activity-section">
+                    <h2 class="section-title">最近活动</h2>
+                    <div class="activity-list" id="recentActivityList">
+                        <div class="empty-state">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                                <polyline points="12 6 12 12 16 14"/>
+                            </svg>
+                            <div>暂无最近活动</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 核心功能入口 -->
+                <div class="features-section">
+                    <h2 class="section-title">核心功能</h2>
+                    <div class="features-grid">
+                        <div class="feature-card" onclick="switchPage('videos')">
+                            <div class="feature-icon">🎬</div>
+                            <h3 class="feature-title">视频管理</h3>
+                            <p class="feature-desc">上传、下载、分类整理您的视频文件</p>
+                        </div>
+                        <div class="feature-card" onclick="showBatchAnalyze()">
+                            <div class="feature-icon">🧠</div>
+                            <h3 class="feature-title">智能分析</h3>
+                            <p class="feature-desc">AI 自动转录、总结、生成笔记和大纲</p>
+                        </div>
+                        <div class="feature-card" onclick="switchPage('knowledge')">
+                            <div class="feature-icon">💡</div>
+                            <h3 class="feature-title">知识库</h3>
+                            <p class="feature-desc">与文档对话，智能问答和内容检索</p>
+                        </div>
+                        <div class="feature-card" onclick="openSettingsModal()">
+                            <div class="feature-icon">⚙️</div>
+                            <h3 class="feature-title">系统设置</h3>
+                            <p class="feature-desc">配置 AI 模型和系统参数</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Videos Page -->
+            <div class="page" id="page-videos">
+                <div class="video-page-layout">
+                    <!-- Sidebar -->
+                    <aside class="sidebar">
+                        <div class="sidebar-title">目录导航</div>
+                        <div class="sidebar-menu">
+                            <!-- 全部视频 -->
+                            <div class="menu-item menu-item-parent" data-action="toggle-videos">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+                        <polyline points="9 22 9 12 15 12 15 22"/>
+                    </svg>
+                    <span>视频</span>
+                    <svg class="menu-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/>
+                    </svg>
+                </div>
+                <div class="submenu submenu-open" id="videos-submenu">
+                    <div class="menu-item" data-path="未分类">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14z"/>
+                        </svg>
+                        <span>未分类</span>
+                    </div>
+                    <div class="menu-item" data-path="学习资料">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 3L1 9l4 2.18v6L12 21l7-3.82v-6l2-1.09V17h2V9L12 3zm6.82 6L12 12.72 5.18 9 12 5.28 18.82 9zM17 15.99l-5 2.73-5-2.73v-3.72L12 15l5-2.73v3.72z"/>
+                        </svg>
+                        <span>学习资料</span>
+                    </div>
+                    <div class="menu-item" data-path="会议记录">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
+                        </svg>
+                        <span>会议记录</span>
+                    </div>
+                    <div class="menu-item" data-path="个人收藏">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                        </svg>
+                        <span>个人收藏</span>
+                    </div>
+                </div>
+                            <!-- 全部文档 -->
+                            <div class="menu-item menu-item-parent active" data-action="toggle-documents">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                        <line x1="16" y1="13" x2="8" y2="13"/>
+                        <line x1="16" y1="17" x2="8" y2="17"/>
+                        <polyline points="10 9 9 9 8 9"/>
+                    </svg>
+                    <span>文档</span>
+                    <svg class="menu-toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/>
+                    </svg>
+                </div>
+                <div class="submenu submenu-open" id="documents-submenu">
+                    <div class="menu-item" data-doc-type="all">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                        </svg>
+                        <span>全部文档</span>
+                    </div>
+                    <div class="menu-item" data-doc-type="subtitle">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                            <line x1="16" y1="13" x2="8" y2="13"/>
+                            <line x1="16" y1="17" x2="8" y2="17"/>
+                        </svg>
+                        <span>原文</span>
+                    </div>
+                    <div class="menu-item" data-doc-type="summary">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                        </svg>
+                        <span>总结</span>
+                    </div>
+                    <div class="menu-item" data-doc-type="outline">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                            <line x1="16" y1="13" x2="8" y2="13"/>
+                        </svg>
+                        <span>大纲</span>
+                    </div>
+                    <div class="menu-item" data-doc-type="notes">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                        </svg>
+                        <span>笔记</span>
+                    </div>
+                </div>
+            </div>
+                        <div class="sidebar-footer">
+                            <div class="user-area" id="userArea">
+                                <div class="avatar" id="avatarBtn">AI</div>
+                                <div class="user-info">
+                                    <div class="model-name" id="currentModelName">未设置</div>
+                                    <div class="provider-name" id="currentProviderName">Open AI</div>
+                                </div>
+                                <!-- 下拉菜单 -->
+                                <div class="user-dropdown" id="userDropdown">
+                                    <div class="dropdown-item" id="openSettingsModal">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M12 15.5A3.5 3.5 0 0 1 8.5 12 3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5 3.5 3.5 0 0 1-3.5 3.5m7.43-2.53c.04-.32.07-.64.07-.97 0-.33-.03-.66-.07-1l2.11-1.63c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.31-.61-.22l-2.49 1c-.52-.39-1.06-.73-1.69-.98l-.37-2.65A.506.506 0 0 0 14 2h-4c-.25 0-.46.18-.5.42l-.37 2.65c-.63.25-1.17.59-1.69.98l-2.49-1c-.22-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.63c-.04.34-.07.67-.07 1 0-.33.03.65.07.97l-2.11 1.66c-.19.15-.25.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1.01c.52.4 1.06.74 1.69.99l.37 2.65c.04.24.25.42.5.42h4c.25 0 .46-.18.5-.42l.37-2.65c.63-.26 1.17-.6 1.69-.99l2.49 1.01c.22.08.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.66z"/>
+                                        </svg>
+                                        设置
+                                    </div>
+                                    <div class="dropdown-item" id="openProfileModal">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                                            <circle cx="12" cy="7" r="4"/>
+                                        </svg>
+                                        个人中心
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </aside>
+
+                    <!-- Content Area -->
+                    <div class="video-content-area" style="flex:1;min-width:0">
+                        <div class="top-bar">
+                            <div class="path-nav">
+                                <span>视频库</span>
+                                <svg viewBox="0 0 24 24" style="width:14px;height:14px;margin:0 8px" fill="currentColor">
+                                    <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/>
+                                </svg>
+                                <span id="currentPath">全部视频</span>
+                            </div>
+                            <div class="top-actions">
+                                <button class="btn btn-secondary" id="btnNewFolder">
+                                    <svg viewBox="0 0 24 24" style="width:16px;height:16px;margin-right:4px" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M12 4v16m8-8H4"/>
+                                    </svg>
+                                    新建目录
+                                </button>
+                                <button class="btn btn-primary" id="btnUpload">
+                                    <svg viewBox="0 0 24 24" style="width:16px;height:16px;margin-right:4px" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>
+                                    </svg>
+                                    上传视频
+                                </button>
+                                <button class="btn btn-secondary" id="btnUrlUpload">
+                                    <svg viewBox="0 0 24 24" style="width:16px;height:16px;margin-right:4px" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/>
+                                    </svg>
+                                    链接上传
+                                </button>
+                            </div>
+                        </div>
+
+
+                        <!-- 批量操作工具栏 -->
+                        <div class="batch-toolbar" id="batchToolbar" style="display:none;padding:12px 16px;background:#f8fafc;border-bottom:1px solid #e2e8f0;align-items:center;gap:12px">
+                            <div style="display:flex;align-items:center;gap:8px">
+                                <input type="checkbox" id="selectAllCheckbox">
+                                <label for="selectAllCheckbox" style="font-size:14px;color:#475569;cursor:pointer;margin:0">全选</label>
+                            </div>
+                            <span id="selectedCount" style="font-size:14px;color:#64748b">已选择 0 个文件</span>
+                            <div style="flex:1"></div>
+                            <button class="btn btn-primary btn-sm" id="batchAnalyzeBtn" disabled>
+                                <svg viewBox="0 0 24 24" style="width:14px;height:14px;margin-right:4px" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                                </svg>
+                                批量转录
+                            </button>
+                            <button class="btn btn-secondary btn-sm" id="clearSelectionBtn">取消选择</button>
+                        </div>
+                        <div class="toolbar">
+                            <div class="view-toggle">
+                                <button class="view-btn active" id="viewCards">
+                                    <svg viewBox="0 0 24 24" style="width:16px;height:16px" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M4 5h16a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V6a1 1 0 011-1zm1 2v10h4V7H5zm6 0v10h4V7h-4zm6 0v10h4V7h-4z"/>
+                                    </svg>
+                                </button>
+                                <button class="view-btn" id="viewList">
+                                    <svg viewBox="0 0 24 24" style="width:16px;height:16px" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z"/>
+                                    </svg>
+                                </button>
+                            <input type="text" class="search-box" placeholder="搜索视频..." id="searchInput">
+                            </div>
+                            <button class="btn btn-secondary btn-sm" id="viewTasksBtn" style="margin-left:8px">
+                                <svg viewBox="0 0 24 24" style="width:14px;height:14px;margin-right:4px" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+                                </svg>
+                                任务列表
+                            </button>
+                        </div>
+
+
+                        <div class="content-area" id="contentArea">
+                            <div class="loading">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/>
+                                </svg>
+                                <div>加载中...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Video Detail Panel -->
+    <div class="detail-panel" id="detailPanel">
+        <div class="detail-header">
+            <span>视频详情</span>
+            <button class="detail-close" id="closeDetail">&times;</button>
+        </div>
+        <div class="detail-content">
+            <div class="video-player" id="videoPlayer">
+                <video controls></video>
+            </div>
+            <div class="detail-info">
+                <div class="info-row">
+                    <span class="info-label">文件名</span>
+                    <span class="info-value" id="detailName">-</span>
+                </div>
+                <div class="info-row" style="display:none">
+                    <span class="info-label">大小</span>
+                    <span class="info-value" id="detailSize">-</span>
+                </div>
+                <div class="info-row" style="display:none">
+                    <span class="info-label">时长</span>
+                    <span class="info-value" id="detailDuration">-</span>
+                </div>
+            </div>
+            <div class="action-buttons">
+                <button class="action-btn primary" id="btnAnalyze">
+                    <svg viewBox="0 0 24 24" style="width:16px;height:16px" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                    </svg>
+                    视频转录
+                </button>
+                <button class="action-btn" id="btnRename">
+                    <svg viewBox="0 0 24 24" style="width:16px;height:16px" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12.01 21.49L3.5 12.99l4.5-4.5 4.01 4.01L17.5 8l4.5 4.5-9.49 9.49z"/>
+                    </svg>
+                    重命名
+                </button>
+                <button class="action-btn" id="btnMove">
+                    <svg viewBox="0 0 24 24" style="width:16px;height:16px" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M10 9h4V6h3l-5-5-5 5h3v3zm-1 1H6V7l-5 5 5 5v-3h3v-4zm14 2l-5-5v3h-3v4h3v3l5-5zm-9 3h-4v3H7l5 5 5-5h-3v-3z"/>
+                    </svg>
+                    移动
+                </button>
+            </div>
+            <div class="progress-bar" id="analyzeProgress" style="display:none">
+                <div class="progress-fill"></div>
+            </div>
+            <div id="analyzeProgressMessage" style="text-align:center; margin-top:8px; color:#666; font-size:14px; display:none"></div>
+            <div class="tab-container">
+                <div class="tabs">
+                    <div class="tab active" data-tab="summary">总结</div>
+                    <div class="tab" data-tab="notes">笔记</div>
+                    <div class="tab" data-tab="outline">大纲</div>
+                    <div class="tab" data-tab="text">原文</div>
+                </div>
+                <div class="tab-content active" id="tabSummary">
+                    <div class="generation-progress" id="genSummaryProgress">
+                        <div class="spinner"></div>
+                        <span>正在生成总结...</span>
+                    </div>
+                    <div class="summary-box markdown-body" id="summaryContent">点击「视频转录」获取原文，然后生成总结</div>
+                    <div style="margin-top:15px">
+                        <button class="action-btn" id="btnGenSummary" style="width:100%">生成总结</button>
+                    </div>
+                </div>
+                <div class="tab-content" id="tabNotes">
+                    <div class="generation-progress" id="genNotesProgress">
+                        <div class="spinner"></div>
+                        <span>正在生成笔记...</span>
+                    </div>
+                    <div class="notes-content markdown-body" id="notesContent">
+                        <p>暂无笔记</p>
+                    </div>
+                    <div style="margin-top:15px">
+                        <button class="action-btn" id="btnGenNotes" style="width:100%">生成笔记</button>
+                    </div>
+                </div>
+                <div class="tab-content" id="tabOutline">
+                    <div class="generation-progress" id="genOutlineProgress">
+                        <div class="spinner"></div>
+                        <span>正在生成大纲...</span>
+                    </div>
+                    <div class="outline-content markdown-body" id="outlineContent">
+                        <p>暂无大纲</p>
+                    </div>
+                    <div style="margin-top:15px">
+                        <button class="action-btn" id="btnGenOutline" style="width:100%">生成大纲</button>
+                    </div>
+                </div>
+                <div class="tab-content" id="tabText">
+                    <div class="text-content" id="textContent">暂无内容，点击「视频转录」开始</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div class="modal-overlay" id="modalNewFolder">
+        <div class="modal">
+            <div class="modal-header">
+                <span>新建目录</span>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>目录名称</label>
+                    <input type="text" id="folderNameInput" placeholder="请输入目录名称">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelNewFolder">取消</button>
+                <button class="btn btn-primary" id="confirmNewFolder">确认</button>
+            </div>
+        </div>
+    </div>
+
+
+    <div class="modal-overlay" id="modalUpload">
+        <div class="modal" style="width:550px">
+            <div class="modal-header">
+                <span>上传视频</span>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="upload-zone" id="uploadDropZone">
+                    <svg viewBox="0 0 24 24" style="width:56px;height:56px;margin-bottom:12px;color:#94a3b8" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+                    </svg>
+                    <div style="margin-bottom:8px">拖拽文件到此处或点击上传</div>
+                    <div style="font-size:13px;color:#94a3b8;margin-bottom:8px">支持多选文件批量上传</div>
+                    <input type="file" accept="video/*" id="uploadFileInput" multiple style="display:none">
+                    <button class="btn btn-primary" id="selectFileBtn">选择文件</button>
+                </div>
+                <!-- 已选择文件列表 -->
+                <div id="selectedFilesList" style="margin-top:16px;max-height:200px;overflow-y:auto;display:none">
+                    <div style="font-weight:600;margin-bottom:8px;color:#334155">已选择的文件：</div>
+                    <div id="selectedFilesContainer"></div>
+                </div>
+                <!-- 上传进度 -->
+                <div id="uploadProgressContainer" style="margin-top:16px;display:none">
+                    <div style="font-weight:600;margin-bottom:8px;color:#334155">上传进度：</div>
+                    <div id="uploadProgressList"></div>
+                </div>
+                <div style="margin-top:16px;font-size:13px;color:#94a3b8">支持格式: MP4, WebM, MOV, AVI, MKV 等</div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelUpload">取消</button>
+                <button class="btn btn-primary" id="confirmUpload" disabled>批量上传</button>
+            </div>
+        </div>
+    </div>
+
+
+
+    <div class="modal-overlay" id="modalUrlUpload">
+        <div class="modal" style="width:550px">
+            <div class="modal-header">
+                <span>链接下载</span>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>视频链接（每行一个链接）</label>
+                    <textarea id="urlUploadInput" rows="5" placeholder="请输入视频链接，每行一个&#10;例如：&#10;https://xxx.com/video1.mp4&#10;https://xxx.com/video2.mp4" style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;resize:vertical"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>目标目录</label>
+                    <select id="urlUploadDir" style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px">
+                        <option value="">根目录</option>
+                    </select>
+                </div>
+                <!-- 待下载 URL 列表 -->
+                <div id="urlListContainer" class="url-list-container" style="display:none">
+                    <div class="url-list-header">
+                        <span>待下载链接</span>
+                        <span id="urlListCount" style="font-size:13px;color:var(--text-secondary)">0个</span>
+                    </div>
+                    <div id="urlList"></div>
+                </div>
+                <!-- 下载进度 -->
+                <div id="batchUrlProgressContainer" class="download-progress-container" style="display:none">
+                    <div class="download-progress-header">
+                        <span>下载进度</span>
+                        <span id="downloadProgressSummary"></span>
+                    </div>
+                    <div id="batchUrlProgressList" class="download-progress-list"></div>
+                </div>
+                <div style="margin-top:16px;font-size:13px;color:#94a3b8">支持: M3U8, MP4, WebM, MOV 等视频链接</div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelUrlUpload">取消</button>
+                <button class="btn btn-primary" id="confirmUrlUpload" disabled>批量下载</button>
+            </div>
+        </div>
+    </div>
+
+
+    <div class="modal-overlay" id="modalDelete">
+        <div class="modal">
+            <div class="modal-header">
+                <span>确认删除</span>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>确定要删除选中的文件/目录吗？此操作不可撤销。</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelDelete">取消</button>
+                <button class="btn btn-danger" id="confirmDelete">删除</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modalRename">
+        <div class="modal">
+            <div class="modal-header">
+                <span>重命名</span>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>新名称</label>
+                    <input type="text" id="renameInput" placeholder="请输入新名称">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelRename">取消</button>
+                <button class="btn btn-primary" id="confirmRename">确认</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modalMove">
+        <div class="modal">
+            <div class="modal-header">
+                <span>移动到</span>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>目标目录</label>
+                    <select id="moveTargetDir" style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px">
+                        <option value="">根目录</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelMove">取消</button>
+                <button class="btn btn-primary" id="confirmMove">确认移动</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 设置弹窗 -->
+    <div class="modal-overlay" id="modalSettings">
+        <div class="modal" style="width:550px">
+            <div class="modal-header">
+                <span>设置</span>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>选择 API 提供商</label>
+                    <div class="provider-tabs" id="providerTabs">
+                        <button class="provider-tab active" data-provider="free-ai">Open AI</button>
+                        <button class="provider-tab" data-provider="openroute">OpenRoute</button>
+                        <button class="provider-tab" data-provider="nvidia">NVIDIA</button>
+                    </div>
+                </div>
+                <div id="providerConfig">
+                    <div class="form-group">
+                        <label>API 地址</label>
+                        <input type="text" id="configApiUrl" placeholder="https://api.example.com/v1" style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px">
+                    </div>
+                    <div class="form-group">
+                        <label>API Key</label>
+                        <div style="position:relative">
+                            <input type="password" id="configApiKey" placeholder="请输入 API Key" style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;padding-right:45px">
+                            <button type="button" id="toggleApiKeyVisibility" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer">
+                                <svg viewBox="0 0 24 24" style="width:20px;height:20px" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                                    <circle cx="12" cy="12" r="3"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>默认模型</label>
+                        <input type="text" id="configDefaultModel" placeholder="请输入默认模型 ID" style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px">
+                    </div>
+                </div>
+                <div style="margin-top:16px;padding-top:16px;border-top:1px solid #e2e8f0">
+                    <label style="display:block;margin-bottom:8px;font-weight:500">当前激活提供商</label>
+                    <select id="activeProviderSelect" style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px">
+                        <option value="free-ai">Open AI</option>
+                        <option value="openroute">OpenRoute</option>
+                        <option value="nvidia">NVIDIA</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelSettings">取消</button>
+                <button class="btn btn-primary" id="saveSettings">保存设置</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 个人中心弹窗 -->
+    <div class="modal-overlay" id="modalProfile">
+        <div class="modal" style="width:450px">
+            <div class="modal-header">
+                <span>个人中心</span>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div style="text-align:center;padding:20px 0">
+                    <div style="width:80px;height:80px;border-radius:50%;background:#667eea;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;color:white;font-size:32px;font-weight:bold">AI</div>
+                    <h3 style="margin:0 0 8px">AI Video Assistant</h3>
+                    <p style="color:#64748b;margin:0 0 24px">智能视频分析助手</p>
+                </div>
+                <div style="background:#f8fafc;border-radius:8px;padding:16px">
+                    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #e2e8f0">
+                        <span style="color:#64748b">当前提供商</span>
+                        <span id="profileProvider">-</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #e2e8f0">
+                        <span style="color:#64748b">当前模型</span>
+                        <span id="profileModel">-</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;padding:8px 0">
+                        <span style="color:#64748b">配置状态</span>
+                        <span id="profileStatus">-</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="closeProfile">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 访问控制提示弹窗 -->
+    <div class="modal-overlay" id="modalAccessDenied">
+        <div class="modal" style="width:450px">
+            <div class="modal-header">
+                <span>提示</span>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div style="text-align:center;padding:20px 0">
+                    <svg viewBox="0 0 24 24" style="width:64px;height:64px;color:#f59e0b;margin-bottom:16px" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="12" y1="8" x2="12" y2="12"/>
+                        <line x1="12" y1="16" x2="12.01" y2="16"/>
+                    </svg>
+                    <h3 style="margin:0 0 8px">需要配置 API</h3>
+                    <p style="color:#64748b;margin:0 0 24px">使用此功能前，请先配置大模型 API</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelAccessDenied">取消</button>
+                <button class="btn btn-primary" id="goToSettings">去配置</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 初始化引导弹窗 -->
+    <div class="modal-overlay" id="modalWelcome">
+        <div class="modal" style="width:500px">
+            <div class="modal-header">
+                <span>欢迎使用 VideoMind</span>
+            </div>
+            <div class="modal-body" id="welcomeBody">
+                <!-- 引导内容将通过 JS 动态渲染 -->
+            </div>
+            <div class="modal-footer" id="welcomeFooter">
+                <!-- 引导按钮将通过 JS 动态渲染 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 重命名对话模态框 -->
+    <div class="modal-overlay" id="modalRenameConversation">
+        <div class="modal" style="width:450px">
+            <div class="modal-header">
+                <span>重命名对话</span>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>新名称</label>
+                    <input type="text" id="renameConvInput" placeholder="请输入新名称">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelRenameConv">取消</button>
+                <button class="btn btn-primary" id="confirmRenameConv">确认</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 任务列表模态框 -->
+    <div class="modal-overlay" id="modalTasks">
+        <div class="modal" style="width:700px;max-height:80vh">
+            <div class="modal-header">
+                <span>任务列表</span>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body" style="max-height:60vh;overflow-y:auto">
+                <div id="tasksList">
+                    <div style="padding:40px;text-align:center;color:#94a3b8">暂无任务</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="clearCompletedTasks">清除已完成</button>
+                <button class="btn btn-secondary" id="closeTasksModal">关闭</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 新建分组模态框 -->
+    <div class="modal-overlay" id="modalCreateFolder">
+        <div class="modal" style="width:450px">
+            <div class="modal-header">
+                <span>新建分组</span>
+                <button class="modal-close" id="cancelCreateFolder">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>分组名称</label>
+                    <input type="text" id="folderNameInput" placeholder="请输入分组名称">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelCreateFolderBtn">取消</button>
+                <button class="btn btn-primary" id="confirmCreateFolder">创建</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 重命名分组模态框 -->
+    <div class="modal-overlay" id="modalRenameFolder">
+        <div class="modal" style="width:450px">
+            <div class="modal-header">
+                <span>重命名分组</span>
+                <button class="modal-close" id="cancelRenameFolder">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>新名称</label>
+                    <input type="text" id="renameFolderInput" placeholder="请输入新名称">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelRenameFolderBtn">取消</button>
+                <button class="btn btn-primary" id="confirmRenameFolder">确认</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Knowledge Page -->
+    <div class="page" id="page-knowledge">
+        <div class="knowledge-layout">
+            <!-- 左侧边栏收起悬浮按钮 -->
+            <button id="btn-expand-left" class="expand-btn expand-btn-left" title="展开知识库" style="display:none">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9 18 15 12 9 6"/>
+                </svg>
+                <span class="label">知识库</span>
+            </button>
+            
+            <!-- 左侧区域：知识库侧边栏 + 收藏面板 -->
+            <div class="left-panels">
+                <!-- 知识库侧边栏 -->
+                <aside class="knowledge-sidebar" id="knowledge-sidebar">
+                    <!-- 顶部操作图标 -->
+                    <div class="sidebar-top-actions">
+                        <button class="sidebar-action-btn" id="btn-sidebar-refresh" title="刷新">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M23 4v6h-6"/>
+                                <path d="M1 20v-6h6"/>
+                                <path d="M3.51 9a9 9 0 0114.85-3.36L23 10"/>
+                                <path d="M20.49 15a9 9 0 01-14.85 3.36L1 14"/>
+                            </svg>
+                        </button>
+                        <button class="sidebar-action-btn" id="btn-upload-doc" title="上传文档">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                                <polyline points="17 8 12 3 7 8"/>
+                                <line x1="12" y1="3" x2="12" y2="15"/>
+                            </svg>
+                        </button>
+                        <button class="sidebar-action-btn" id="btn-collapse-left" title="收起">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="15 18 9 12 15 6"/>
+                            </svg>
+                        </button>
+                    </div>
+                    
+                    <!-- 搜索框 -->
+                    <div class="sidebar-search">
+                        <svg viewBox="0 0 24 24" class="search-icon" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"/>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                        </svg>
+                        <input type="text" id="search-input" placeholder="搜索文档...">
+                    </div>
+                    
+                    <!-- 用户信息 -->
+                    <div class="sidebar-user">
+                        <div class="user-avatar">AI</div>
+                        <div class="user-name">知识助手</div>
+                    </div>
+                    
+                    <!-- 收藏功能区（集成到侧边栏） -->
+                    <div class="sidebar-favorites-section" id="sidebar-favorites-section">
+                        <div class="favorites-section-header">
+                            <div class="favorites-title-row">
+                                <button class="favorites-toggle-btn" id="btn-toggle-favorites" title="折叠/展开">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="toggle-arrow">
+                                        <polyline points="9 18 15 12 9 6"/>
+                                    </svg>
+                                </button>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="favorites-icon">
+                                    <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/>
+                                </svg>
+                                <span>收藏</span>
+                            </div>
+                            <button id="btn-export-favorites" class="btn-text">导出</button>
+                        </div>
+                        <div id="favorites-list" class="favorites-list"></div>
+                    </div>
+
+                    <!-- 分组管理区 -->
+                    <div class="sidebar-group-section">
+                        <div class="group-header">
+                            <span class="group-title">分组</span>
+                            <button class="create-folder-btn" id="btn-create-folder" title="新建分组">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M12 4v16m8-8H4"/>
+                                </svg>
+                                <span>创建分组</span>
+                            </button>
+                        </div>
+                        <!-- 文件树列表 -->
+                        <div id="knowledge-file-list" class="file-tree-list"></div>
+                    </div>
+
+                    <!-- 对话列表 -->
+                    <div class="conversation-section">
+                        <div class="section-title">对话历史</div>
+                        <div id="conversation-list" class="conversation-list"></div>
+                        <button id="btn-new-chat" class="btn-new-chat">+ 新建对话</button>
+                    </div>
+                </aside>
+
+
+            </div>
+            
+
+
+            <!-- 主内容区：聊天区域（向上扩展，占据中间） -->
+            <main class="knowledge-main">
+                <div id="chat-area" class="chat-area">
+                    <div id="chat-messages" class="chat-messages">
+                        <div class="empty-hint">请先在左侧选择一个文档</div>
+                    </div>
+
+                    <!-- 输入区 -->
+                    <div class="chat-input-area">
+                        <div class="input-wrapper">
+                            <textarea id="chat-input" rows="3" placeholder="输入问题... (Enter 发送, Shift+Enter 换行)"></textarea>
+                            <button id="btn-send" class="btn-send">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="22" y1="2" x2="11" y2="13"/>
+                                    <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="input-status">
+                            <span id="index-status">未索引</span>
+                            <button id="btn-reindex" class="btn-text">重新索引</button>
+                        </div>
+                    </div>
+                </div>
+            </main>
+
+            <!-- 文档预览面板（在右侧） -->
+            <aside id="doc-preview" class="doc-preview">
+                <div class="preview-header">
+                    <div class="header-actions">
+                        <button id="btn-collapse-right" class="btn-icon collapse-btn" title="收起">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="9 18 15 12 9 6"/>
+                            </svg>
+                        </button>
+                        <span id="doc-title">选择文档</span>
+                    </div>
+                    <button id="btn-edit-doc" class="btn-icon" title="编辑">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                            <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                        </svg>
+                    </button>
+                </div>
+                <div id="doc-content" class="preview-content markdown-body">
+                    <div class="empty-hint">点击左侧文档开始对话</div>
+                </div>
+            </aside>
+            
+            <!-- 右侧边栏收起悬浮按钮 -->
+            <button id="btn-expand-right" class="expand-btn expand-btn-right" title="展开文档预览" style="display:none">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="15 18 9 12 15 6"/>
+                </svg>
+                <span class="label">文档</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Hidden file input -->
+    <input type="file" id="file-upload-input" accept=".md,.txt" multiple style="display:none">
+
+    <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="/static/js/app.js"></script>
+    <script src="/static/js/pages/knowledge/api.js"></script>
+    <script src="/static/js/pages/knowledge/index.js"></script>
+    
+    <!-- 新增功能脚本 -->
+    <script>
+        // ============================
+        // 新增功能：头像下拉菜单、设置、访问控制、引导
+        // ============================
+        document.addEventListener('DOMContentLoaded', function() {
+            initUserMenu();
+            initSettingsModal();
+            initProfileModal();
+            initAccessControl();
+            checkInitialConfig();
+        });
+
+        let currentConfig = {
+            initialized: false,
+            active_provider: 'free-ai',
+            providers: {
+                'free-ai': { name: 'Open AI', api_url: 'https://api.freetheai.xyz/v1', api_key: '', default_model: '' },
+                'openroute': { name: 'OpenRoute', api_url: '', api_key: '', default_model: '' },
+                'nvidia': { name: 'NVIDIA', api_url: '', api_key: '', default_model: '' }
+            }
+        };
+
+        function initUserMenu() {
+            const avatarBtn = document.getElementById('avatarBtn');
+            const userDropdown = document.getElementById('userDropdown');
+            
+            if (avatarBtn && userDropdown) {
+                avatarBtn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    userDropdown.classList.toggle('show');
+                });
+
+                // 点击其他地方关闭菜单
+                document.addEventListener('click', function() {
+                    userDropdown.classList.remove('show');
+                });
+
+                // 点击菜单项
+                document.getElementById('openSettingsModal')?.addEventListener('click', function() {
+                    userDropdown.classList.remove('show');
+                    openSettingsModal();
+                });
+
+                document.getElementById('openProfileModal')?.addEventListener('click', function() {
+                    userDropdown.classList.remove('show');
+                    openProfileModal();
+                });
+            }
+        }
+
+        // ============================
+        // 设置弹窗
+        // ============================
+        function initSettingsModal() {
+            const providerTabs = document.querySelectorAll('.provider-tab');
+            const toggleApiKeyBtn = document.getElementById('toggleApiKeyVisibility');
+            const saveBtn = document.getElementById('saveSettings');
+            const cancelBtn = document.getElementById('cancelSettings');
+
+            providerTabs.forEach(tab => {
+                tab.addEventListener('click', function() {
+                    providerTabs.forEach(t => t.classList.remove('active'));
+                    this.classList.add('active');
+                    loadProviderConfig(this.dataset.provider);
+                });
+            });
+
+            if (toggleApiKeyBtn) {
+                toggleApiKeyBtn.addEventListener('click', function() {
+                    const input = document.getElementById('configApiKey');
+                    if (input) {
+                        input.type = input.type === 'password' ? 'text' : 'password';
+                    }
+                });
+            }
+
+            if (saveBtn) {
+                saveBtn.addEventListener('click', saveConfig);
+            }
+
+            if (cancelBtn) {
+                cancelBtn.addEventListener('click', function() {
+                    document.getElementById('modalSettings').classList.remove('show');
+                });
+            }
+        }
+
+        function openSettingsModal() {
+            document.getElementById('modalSettings').classList.add('show');
+            loadConfigFromServer();
+        }
+
+        async function loadConfigFromServer() {
+            try {
+                const response = await fetch('/api/config');
+                const data = await response.json();
+                if (data.success) {
+                    currentConfig = data.config;
+                    loadProviderConfig(currentConfig.active_provider);
+                    const activeSelect = document.getElementById('activeProviderSelect');
+                    if (activeSelect) activeSelect.value = currentConfig.active_provider;
+                }
+            } catch (e) {
+                console.error('Load config failed:', e);
+            }
+        }
+
+        function loadProviderConfig(providerId) {
+            const provider = currentConfig.providers[providerId];
+            if (provider) {
+                const urlInput = document.getElementById('configApiUrl');
+                const keyInput = document.getElementById('configApiKey');
+                const modelInput = document.getElementById('configDefaultModel');
+                if (urlInput) urlInput.value = provider.api_url || '';
+                if (keyInput) keyInput.value = provider.api_key || '';
+                if (modelInput) modelInput.value = provider.default_model || '';
+            }
+        }
+
+        async function saveConfig() {
+            const activeProvider = document.getElementById('activeProviderSelect')?.value || currentConfig.active_provider;
+            const activeTab = document.querySelector('.provider-tab.active');
+            const currentEditingProvider = activeTab ? activeTab.dataset.provider : activeProvider;
+
+            const providers = { ...currentConfig.providers };
+            providers[currentEditingProvider] = {
+                ...providers[currentEditingProvider],
+                api_url: document.getElementById('configApiUrl')?.value || '',
+                api_key: document.getElementById('configApiKey')?.value || '',
+                default_model: document.getElementById('configDefaultModel')?.value || ''
+            };
+
+            try {
+                const response = await fetch('/api/config/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        providers: providers,
+                        active_provider: activeProvider,
+                        set_initialized: true
+                    })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    currentConfig.active_provider = activeProvider;
+                    currentConfig.providers = providers;
+                    currentConfig.initialized = true;
+                    updateModelDisplay();
+                    document.getElementById('modalSettings').classList.remove('show');
+                    alert('保存成功！');
+                }
+            } catch (e) {
+                alert('保存失败：' + e.message);
+            }
+        }
+
+        // ============================
+        // 个人中心弹窗
+        // ============================
+        function initProfileModal() {
+            document.getElementById('closeProfile')?.addEventListener('click', function() {
+                document.getElementById('modalProfile').classList.remove('show');
+            });
+        }
+
+        function openProfileModal() {
+            document.getElementById('modalProfile').classList.add('show');
+            updateProfileDisplay();
+        }
+
+        function updateProfileDisplay() {
+            const provider = currentConfig.providers[currentConfig.active_provider];
+            const profileProvider = document.getElementById('profileProvider');
+            const profileModel = document.getElementById('profileModel');
+            const profileStatus = document.getElementById('profileStatus');
+            if (profileProvider) profileProvider.textContent = provider?.name || '未设置';
+            if (profileModel) profileModel.textContent = provider?.default_model || '未设置';
+            if (profileStatus) profileStatus.textContent = currentConfig.initialized ? '已配置' : '未配置';
+        }
+
+        // ============================
+        // 访问控制
+        // ============================
+        function initAccessControl() {
+            document.querySelectorAll('[data-page]').forEach(btn => {
+                const page = btn.dataset.page;
+                if (page === 'videos' || page === 'knowledge') {
+                    btn.addEventListener('click', async function(e) {
+                        if (!await checkApiConfig()) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            showAccessDeniedModal();
+                            return false;
+                        }
+                    });
+                }
+            });
+
+            document.getElementById('goToSettings')?.addEventListener('click', function() {
+                document.getElementById('modalAccessDenied').classList.remove('show');
+                openSettingsModal();
+            });
+
+            document.getElementById('cancelAccessDenied')?.addEventListener('click', function() {
+                document.getElementById('modalAccessDenied').classList.remove('show');
+            });
+        }
+
+        async function checkApiConfig() {
+            try {
+                const response = await fetch('/api/config/status');
+                const data = await response.json();
+                if (data.success) {
+                    currentConfig.initialized = data.initialized;
+                    return data.api_configured;
+                }
+            } catch (e) {
+                console.error('Check config failed:', e);
+            }
+            return false;
+        }
+
+        function showAccessDeniedModal() {
+            document.getElementById('modalAccessDenied').classList.add('show');
+        }
+
+        // ============================
+        // 初始化引导
+        // ============================
+        async function checkInitialConfig() {
+            try {
+                const response = await fetch('/api/config/status');
+                const data = await response.json();
+                if (data.success && !data.initialized) {
+                    showWelcomeModal();
+                }
+            } catch (e) {
+                console.error('Check initial config failed:', e);
+            }
+        }
+
+        let welcomeStep = 0;
+        const totalSteps = 4;
+
+        function showWelcomeModal() {
+            const modal = document.getElementById('modalWelcome');
+            if (modal) modal.classList.add('show');
+            welcomeStep = 1;
+            renderWelcomeStep();
+        }
+
+        function renderWelcomeStep() {
+            const body = document.getElementById('welcomeBody');
+            const footer = document.getElementById('welcomeFooter');
+            if (!body || !footer) return;
+            
+            let bodyHtml = '';
+            let footerHtml = '';
+
+            // 步骤指示器
+            let stepsHtml = '<div class="welcome-progress">';
+            for (let i = 1; i <= totalSteps; i++) {
+                let cls = '';
+                if (i < welcomeStep) cls = 'completed';
+                if (i === welcomeStep) cls = 'active';
+                stepsHtml += `<div class="welcome-progress-dot ${cls}"></div>`;
+            }
+            stepsHtml += '</div>';
+
+            switch (welcomeStep) {
+                case 1:
+                    bodyHtml = `
+                        ${stepsHtml}
+                        <div class="welcome-step">
+                            <div class="welcome-step-icon">🎉</div>
+                            <h2 class="welcome-step-title">欢迎使用 VideoMind</h2>
+                            <p class="welcome-step-desc">这是一个强大的 AI 视频分析助手，让我们开始设置吧！</p>
+                        </div>
+                    `;
+                    footerHtml = `
+                        <button class="btn btn-secondary" onclick="skipWelcomeSetup()">跳过</button>
+                        <button class="btn btn-primary" onclick="nextWelcomeStep()">下一步</button>
+                    `;
+                    break;
+                case 2:
+                    bodyHtml = `
+                        ${stepsHtml}
+                        <div class="welcome-step">
+                            <div class="welcome-step-icon">⚙️</div>
+                            <h2 class="welcome-step-title">选择 API 提供商</h2>
+                            <p class="welcome-step-desc">选择你想使用的 AI 服务提供商</p>
+                            <div class="welcome-step-form">
+                                <select id="welcomeProviderSelect" style="width:100%;padding:12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;">
+                                    <option value="free-ai">Open AI (默认，已配置)</option>
+                                    <option value="openroute">OpenRoute</option>
+                                    <option value="nvidia">NVIDIA</option>
+                                </select>
+                            </div>
+                        </div>
+                    `;
+                    footerHtml = `
+                        <button class="btn btn-secondary" onclick="prevWelcomeStep()">上一步</button>
+                        <button class="btn btn-primary" onclick="nextWelcomeStep()">下一步</button>
+                    `;
+                    break;
+                case 3:
+                    bodyHtml = `
+                        ${stepsHtml}
+                        <div class="welcome-step">
+                            <div class="welcome-step-icon">🔑</div>
+                            <h2 class="welcome-step-title">配置 API</h2>
+                            <p class="welcome-step-desc">输入你的 API 地址和密钥</p>
+                            <div class="welcome-step-form" style="text-align:left;">
+                                <div style="margin-bottom:12px;">
+                                    <label style="display:block;margin-bottom:6px;font-size:14px;font-weight:500;">API 地址</label>
+                                    <input type="text" id="welcomeApiUrl" placeholder="https://api.example.com/v1" style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;">
+                                </div>
+                                <div>
+                                    <label style="display:block;margin-bottom:6px;font-size:14px;font-weight:500;">API Key</label>
+                                    <input type="password" id="welcomeApiKey" placeholder="sk-..." style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;">
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    footerHtml = `
+                        <button class="btn btn-secondary" onclick="prevWelcomeStep()">上一步</button>
+                        <button class="btn btn-primary" onclick="nextWelcomeStep()">下一步</button>
+                    `;
+                    break;
+                case 4:
+                    bodyHtml = `
+                        ${stepsHtml}
+                        <div class="welcome-step">
+                            <div class="welcome-step-icon">✨</div>
+                            <h2 class="welcome-step-title">完成设置</h2>
+                            <p class="welcome-step-desc">恭喜！你已完成基本设置，现在可以开始使用了。</p>
+                        </div>
+                    `;
+                    footerHtml = `
+                        <button class="btn btn-secondary" onclick="prevWelcomeStep()">上一步</button>
+                        <button class="btn btn-primary" onclick="finishWelcomeSetup()">开始使用</button>
+                    `;
+                    break;
+            }
+
+            body.innerHTML = bodyHtml;
+            footer.innerHTML = footerHtml;
+
+            // 预填充表单
+            if (welcomeStep === 3) {
+                const providerSelect = document.getElementById('welcomeProviderSelect');
+                const selectedProvider = providerSelect ? providerSelect.value : 'free-ai';
+                const provider = currentConfig.providers[selectedProvider];
+                if (provider) {
+                    const urlInput = document.getElementById('welcomeApiUrl');
+                    const keyInput = document.getElementById('welcomeApiKey');
+                    if (urlInput) urlInput.value = provider.api_url || '';
+                    if (keyInput) keyInput.value = provider.api_key || '';
+                }
+            }
+        }
+
+        function nextWelcomeStep() {
+            if (welcomeStep < totalSteps) {
+                welcomeStep++;
+                renderWelcomeStep();
+            }
+        }
+
+        function prevWelcomeStep() {
+            if (welcomeStep > 1) {
+                welcomeStep--;
+                renderWelcomeStep();
+            }
+        }
+
+        async function finishWelcomeSetup() {
+            // 保存配置
+            const providerSelect = document.getElementById('welcomeProviderSelect');
+            const selectedProvider = providerSelect ? providerSelect.value : 'free-ai';
+            
+            if (welcomeStep >= 3) {
+                const urlInput = document.getElementById('welcomeApiUrl');
+                const keyInput = document.getElementById('welcomeApiKey');
+                if (urlInput && keyInput) {
+                    currentConfig.providers[selectedProvider].api_url = urlInput.value;
+                    currentConfig.providers[selectedProvider].api_key = keyInput.value;
+                }
+            }
+            
+            currentConfig.active_provider = selectedProvider;
+            
+            try {
+                await fetch('/api/config/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        providers: currentConfig.providers,
+                        active_provider: selectedProvider,
+                        set_initialized: true
+                    })
+                });
+            } catch (e) {
+                console.error('Save config failed:', e);
+            }
+
+            currentConfig.initialized = true;
+            document.getElementById('modalWelcome').classList.remove('show');
+            updateModelDisplay();
+        }
+
+        function skipWelcomeSetup() {
+            document.getElementById('modalWelcome').classList.remove('show');
+        }
+
+        // 辅助：更新模型显示
+        function updateModelDisplay() {
+            const provider = currentConfig.providers[currentConfig.active_provider];
+            const modelNameEl = document.getElementById('currentModelName');
+            const providerNameEl = document.getElementById('currentProviderName');
+            if (modelNameEl) modelNameEl.textContent = provider?.default_model || '未设置';
+            if (providerNameEl) providerNameEl.textContent = provider?.name || '未设置';
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+{
+  "providers": {
+    "open-ai": {
+      "name": "Open AI",
+      "api_url": "https://api-inference.modelscope.cn/v1/",
+      "api_key": "ms-fa8102f8-5b02-4c4c-b9f9-5a0e27bc8f7c",
+      "default_model": "deepseek-ai/DeepSeek-V4-Pro"
+    },
+    "openroute": {
+      "name": "OpenRoute",
+      "api_url": "",
+      "api_key": "",
+      "default_model": ""
+    },
+    "nvidia": {
+      "name": "NVIDIA",
+      "api_url": "",
+      "api_key": "",
+      "default_model": ""
+    }
+  },
+  "active_provider": "open-ai",
+  "initialized": true
+}
