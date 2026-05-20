@@ -430,11 +430,134 @@ async function loadFiles() {
         
         if (data.success) {
             renderFiles(data.items, searchQuery);
+            updatePathNav();
         }
     } catch (error) {
         console.error('加载文件失败:', error);
         renderFiles([], '');
     }
+}
+
+// 更新路径导航
+function updatePathNav() {
+    const pathNav = document.querySelector('.path-nav');
+    if (!pathNav) return;
+    
+    let html = '';
+    
+    // "视频库" 根节点
+    html += `<span class="path-segment" data-path="" style="cursor:pointer;color:var(--primary);">视频库</span>`;
+    
+    // 分割路径
+    if (currentPath) {
+        const pathParts = currentPath.split(/[\\/]/).filter(p => p);
+        let accumulatedPath = '';
+        
+        pathParts.forEach((part, index) => {
+            html += `<svg viewBox="0 0 24 24" style="width:14px;height:14px;margin:0 8px;" fill="currentColor">
+                <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/>
+            </svg>`;
+            
+            accumulatedPath = accumulatedPath ? `${accumulatedPath}/${part}` : part;
+            const isLast = index === pathParts.length - 1;
+            
+            html += `<span class="path-segment" data-path="${escapeHtml(accumulatedPath)}" style="cursor:pointer;${isLast ? 'color:var(--text-primary);font-weight:500;' : 'color:var(--primary);'}">${escapeHtml(part)}</span>`;
+        });
+    } else {
+        // 根目录
+        html += `<svg viewBox="0 0 24 24" style="width:14px;height:14px;margin:0 8px;" fill="currentColor">
+            <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/>
+        </svg>`;
+        html += `<span class="path-segment" data-path="" style="cursor:pointer;color:var(--text-primary);font-weight:500;">全部视频</span>`;
+    }
+    
+    pathNav.innerHTML = html;
+    
+    // 绑定点击事件
+    pathNav.querySelectorAll('.path-segment').forEach(segment => {
+        segment.addEventListener('click', () => {
+            const path = segment.dataset.path;
+            if (path !== undefined) {
+                navigateToPath(path);
+            }
+        });
+    });
+}
+
+// 导航到指定路径
+function navigateToPath(path) {
+    currentPath = path;
+    loadFiles();
+    updateSidebarActiveState();
+}
+
+// 更新侧边栏激活状态
+function updateSidebarActiveState() {
+    // 只处理子菜单项（排除父菜单项）
+    document.querySelectorAll('#videos-submenu .menu-item:not(.menu-item-parent)').forEach(item => {
+        item.classList.remove('active');
+        if (item.dataset.path === currentPath) {
+            item.classList.add('active');
+        }
+    });
+}
+
+// 动态加载侧边栏视频子菜单
+async function loadSidebarVideoFolders() {
+    const submenu = document.getElementById('videos-submenu');
+    if (!submenu) return;
+    
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/files?path=`);
+        const data = await response.json();
+        
+        if (data.success) {
+            const dirs = data.items.filter(item => item.type === 'directory');
+            
+            let html = '';
+            // "全部视频" 根选项
+            html += `<div class="menu-item" data-path="">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+                    <polyline points="9 22 9 12 15 12 15 22"/>
+                </svg>
+                <span>全部视频</span>
+            </div>`;
+            
+            // 实际文件夹
+            dirs.forEach(dir => {
+                html += `<div class="menu-item" data-path="${escapeHtml(dir.path)}">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/>
+                    </svg>
+                    <span>${escapeHtml(dir.name)}</span>
+                </div>`;
+            });
+            
+            submenu.innerHTML = html;
+            
+            // 重新绑定事件
+            bindSidebarEvents();
+            updateSidebarActiveState();
+        }
+    } catch (error) {
+        console.error('加载侧边栏文件夹失败:', error);
+    }
+}
+
+// 绑定侧边栏事件
+function bindSidebarEvents() {
+    // 视频子菜单点击
+    document.querySelectorAll('#videos-submenu .menu-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+            e.stopPropagation();
+            // 只移除子菜单项的 active 类，排除父菜单项
+            document.querySelectorAll('.menu-item:not(.menu-item-parent)').forEach(i => i.classList.remove('active'));
+            item.classList.add('active');
+            currentPath = item.dataset.path;
+            loadFiles();
+        });
+    });
 }
 
 // 文档文件扩展名列表
@@ -613,10 +736,12 @@ function renderCardsView(items) {
         if (item.type === 'directory') {
             html += `
                 <div class="file-card" data-path="${escapeHtml(item.path)}" data-type="directory">
-                    <div class="card-thumbnail">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
-                        </svg>
+                    <div class="card-thumbnail-wrapper">
+                        <div class="card-thumbnail">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+                            </svg>
+                        </div>
                     </div>
                     <div class="card-info">
                         <div class="card-name">${escapeHtml(item.name)}</div>
@@ -633,27 +758,30 @@ function renderCardsView(items) {
                     <div style="position: absolute; top: 8px; left: 8px; z-index: 10;">
                         <input type="checkbox" 
                                ${isSelected ? 'checked' : ''} 
-                               onchange="toggleVideoSelection('${escapeHtml(item.path)}')"
+                               onchange="toggleVideoSelection(this.closest('.file-card').dataset.path)"
                                style="width: 18px; height: 18px; cursor: pointer;">
                     </div>
-                    <div class="card-thumbnail video" data-thumbnail="${thumbnailUrl}">
-                        <!-- 缩略图将通过 JS 动态加载 -->
-                        <div class="thumbnail-placeholder" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;">
-                            <svg viewBox="0 0 24 24" style="width:48px;height:48px;color:#94a3b8" fill="none" stroke="currentColor" stroke-width="2">
-                                <rect x="2" y="2" width="20" height="20" rx="2.1" ry="2.1"/>
-                            </svg>
-                        </div>
-                        <button class="card-actions-btn" onclick="showCardActions(event, '${escapeHtml(item.path)}')">
-                            <svg viewBox="0 0 24 24" style="width:16px;height:16px" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="12" cy="12" r="1"/>
-                                <circle cx="19" cy="12" r="1"/>
-                                <circle cx="5" cy="12" r="1"/>
-                            </svg>
-                        </button>
-                        <div class="card-actions-menu" id="actions-${escapeHtml(item.path).replace(/[./\\]/g, '-')}">
-                            <button class="action-item" onclick="renameFileFromCard('${escapeHtml(item.path)}')">重命名</button>
-                            <button class="action-item" onclick="moveFileFromCard('${escapeHtml(item.path)}')">移动</button>
-                            <button class="action-item danger" onclick="deleteFileFromCard('${escapeHtml(item.path)}')">删除</button>
+                    <div class="card-thumbnail-wrapper">
+                        <div class="card-thumbnail video" data-thumbnail="${thumbnailUrl}">
+                            <!-- 缩略图将通过 JS 动态加载 -->
+                            <div class="thumbnail-placeholder" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;">
+                                <svg viewBox="0 0 24 24" style="width:48px;height:48px;color:#94a3b8" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="2" y="2" width="20" height="20" rx="2.1" ry="2.1"/>
+                                </svg>
+                            </div>
+                            <button class="card-actions-btn" data-item-path="${escapeHtml(item.path)}">
+                                <svg viewBox="0 0 24 24" style="width:16px;height:16px" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="1"/>
+                                    <circle cx="19" cy="12" r="1"/>
+                                    <circle cx="5" cy="12" r="1"/>
+                                </svg>
+                            </button>
+                            <!-- 卡片内部的菜单 -->
+                            <div class="card-actions-menu" style="top: 44px; right: 8px; z-index: 100;">
+                                <button class="action-item" data-action="rename">重命名</button>
+                                <button class="action-item" data-action="move">移动</button>
+                                <button class="action-item danger" data-action="delete">删除</button>
+                            </div>
                         </div>
                     </div>
                     <div class="card-info">
@@ -688,12 +816,12 @@ function renderListView(items) {
         const isVideoFile = item.type === 'file';
 
         html += `
-            <div class="list-item" data-path="${escapeHtml(item.path)}" data-type="${item.type}">
+            <div class="list-item ${isVideoFile && isSelected ? 'selected' : ''}" data-path="${escapeHtml(item.path)}" data-type="${item.type}">
                 <div class="list-icon">
                     ${isVideoFile ? `
                         <input type="checkbox" 
                             ${isSelected ? 'checked' : ''} 
-                            onclick="event.stopPropagation(); toggleVideoSelection('${escapeHtml(item.path)}')"
+                            onclick="event.stopPropagation(); toggleVideoSelection(this.closest('.list-item').dataset.path)"
                             style="width:18px;height:18px;cursor:pointer;margin-right:8px">
                     ` : ''}
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -703,19 +831,20 @@ function renderListView(items) {
                 <div class="list-name">${escapeHtml(item.name)}</div>
                 <div class="list-meta">${formatFileSize(item.size)}</div>
                 <div class="list-meta">-</div>
-                <div>
+                <div style="position: relative;">
                     ${isVideoFile ? `
-                        <button class="card-actions-btn" onclick="event.stopPropagation(); showCardActions(event, '${escapeHtml(item.path)}')">
+                        <button class="card-actions-btn" data-item-path="${escapeHtml(item.path)}">
                             <svg viewBox="0 0 24 24" style="width:16px;height:16px" fill="none" stroke="currentColor" stroke-width="2">
                                 <circle cx="12" cy="12" r="1"/>
                                 <circle cx="19" cy="12" r="1"/>
                                 <circle cx="5" cy="12" r="1"/>
                             </svg>
                         </button>
-                        <div class="card-actions-menu" id="actions-${escapeHtml(item.path).replace(/[./\\]/g, '-')}" style="right:0;left:auto">
-                            <button class="action-item" onclick="renameFileFromCard('${escapeHtml(item.path)}')">重命名</button>
-                            <button class="action-item" onclick="moveFileFromCard('${escapeHtml(item.path)}')">移动</button>
-                            <button class="action-item danger" onclick="deleteFileFromCard('${escapeHtml(item.path)}')">删除</button>
+                        <!-- 列表内部的菜单 -->
+                        <div class="card-actions-menu" style="top: 100%; right: 0; margin-top: 4px; z-index: 100;">
+                            <button class="action-item" data-action="rename">重命名</button>
+                            <button class="action-item" data-action="move">移动</button>
+                            <button class="action-item danger" data-action="delete">删除</button>
                         </div>
                     ` : ''}
                 </div>
@@ -935,17 +1064,19 @@ async function clearCompletedTasks() {
 }
 
 function bindFileEvents() {
+    const contentArea = document.getElementById('contentArea');
+    if (!contentArea) return;
+    
+    // 绑定文件/目录点击事件
     document.querySelectorAll('.file-card, .list-item').forEach(el => {
         el.addEventListener('click', (e) => {
-            if (e.target.closest('.card-actions-btn') || e.target.closest('.action-item')) return;
+            if (e.target.closest('.card-actions-btn') || e.target.closest('input')) return;
             
             const path = el.dataset.path;
             const type = el.dataset.type;
             
             if (type === 'directory') {
-                currentPath = path;
-                document.getElementById('currentPath').textContent = path || '全部视频';
-                loadFiles();
+                navigateToPath(path);
             } else if (type === 'document') {
                 // 处理文档文件点击 - 先不做具体实现
                 console.log('文档点击:', path);
@@ -954,22 +1085,56 @@ function bindFileEvents() {
             }
         });
     });
+    
+    // 绑定操作按钮事件
+    contentArea.querySelectorAll('.card-actions-btn').forEach(btn => {
+        btn.addEventListener('click', showCardActions);
+    });
 }
 
-function showCardActions(event, path) {
+function showCardActions(event) {
     event.stopPropagation();
-    const menuId = 'actions-' + path.replace(/[./\\]/g, '-');
-    const menu = document.getElementById(menuId);
+    const btn = event.currentTarget;
+    const itemPath = btn.dataset.itemPath;
+    // 获取按钮所在容器（卡片缩略图或列表项）中的菜单
+    const menu = btn.nextElementSibling;
     
+    // 关闭其他所有菜单
     document.querySelectorAll('.card-actions-menu').forEach(m => {
-        if (m !== menu) m.classList.remove('show');
+        if (m !== menu) {
+            m.style.display = 'none';
+        }
     });
     
-    if (menu) menu.classList.toggle('show');
+    // 切换当前菜单的显示状态
+    if (menu.style.display === 'block') {
+        menu.style.display = 'none';
+    } else {
+        menu.style.display = 'block';
+    }
+    
+    // 绑定菜单项事件
+    const menuItems = menu.querySelectorAll('.action-item');
+    menuItems.forEach(item => {
+        item.onclick = (e) => {
+            e.stopPropagation();
+            const action = item.dataset.action;
+            if (action === 'rename') {
+                renameFileFromCard(itemPath);
+            } else if (action === 'move') {
+                moveFileFromCard(itemPath);
+            } else if (action === 'delete') {
+                deleteFileFromCard(itemPath);
+            }
+            menu.style.display = 'none';
+        };
+    });
 }
 
 document.addEventListener('click', () => {
-    document.querySelectorAll('.card-actions-menu').forEach(m => m.classList.remove('show'));
+    document.querySelectorAll('.card-actions-menu').forEach(menu => {
+        menu.style.display = 'none';
+    });
 });
 
 async function loadDirectories() {
@@ -1034,6 +1199,8 @@ async function createFolder() {
             document.getElementById('folderNameInput').value = '';
             loadFiles();
             loadDirectories();
+            // 刷新侧边栏文件夹
+            loadSidebarVideoFolders();
         } else {
             alert('创建失败: ' + data.error);
         }
@@ -1997,7 +2164,8 @@ function bindEvents() {
             // 检查是否是文档子菜单（有 data-doc-type 属性）
             if (item.dataset.docType !== undefined) {
                 e.stopPropagation();
-                document.querySelectorAll('.menu-item').forEach(i => i.classList.remove('active'));
+                // 只移除子菜单项的 active 类，排除父菜单项
+                document.querySelectorAll('.menu-item:not(.menu-item-parent)').forEach(i => i.classList.remove('active'));
                 item.classList.add('active');
                 
                 // 获取文档类型
@@ -2017,15 +2185,11 @@ function bindEvents() {
                 loadDocuments(docType);
                 return;
             }
-            
-            // 普通视频目录菜单
-            document.querySelectorAll('.menu-item').forEach(i => i.classList.remove('active'));
-            item.classList.add('active');
-            currentPath = item.dataset.path;
-            document.getElementById('currentPath').textContent = currentPath || '全部视频';
-            loadFiles();
         });
     });
+    
+    // 文档子菜单事件绑定
+    bindSidebarEvents();
 
     // View toggle
     const viewCardsBtn = document.getElementById('viewCards');
@@ -2231,13 +2395,7 @@ function bindEvents() {
     const btnGenOutline = document.getElementById('btnGenOutline');
     if (btnGenOutline) btnGenOutline.addEventListener('click', generateOutline);
 
-    // Rename
-    const btnRename = document.getElementById('btnRename');
-    if (btnRename) {
-        btnRename.addEventListener('click', () => {
-            if (currentVideo) renameFileFromCard(currentVideo.path);
-        });
-    }
+    // Rename modal functionality (still used by card actions)
     const cancelRenameBtn = document.getElementById('cancelRename');
     if (cancelRenameBtn) {
         cancelRenameBtn.addEventListener('click', () => {
@@ -2250,13 +2408,7 @@ function bindEvents() {
         confirmRenameBtn.addEventListener('click', renameFile);
     }
 
-    // Move
-    const btnMove = document.getElementById('btnMove');
-    if (btnMove) {
-        btnMove.addEventListener('click', () => {
-            if (currentVideo) moveFileFromCard(currentVideo.path);
-        });
-    }
+    // Move modal functionality (still used by card actions)
     const cancelMoveBtn = document.getElementById('cancelMove');
     if (cancelMoveBtn) {
         cancelMoveBtn.addEventListener('click', () => {
@@ -2340,4 +2492,9 @@ document.addEventListener('DOMContentLoaded', () => {
     loadStats();
     loadDashboardCharts();
     loadRecentActivity();
+    
+    // 加载侧边栏视频文件夹
+    loadSidebarVideoFolders();
+    // 初始化路径导航
+    updatePathNav();
 });

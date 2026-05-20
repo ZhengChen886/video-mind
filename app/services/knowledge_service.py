@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import List, Optional, Dict, Any
 from app.repositories.knowledge_repo import KnowledgeRepository
 from app.models.knowledge import (
@@ -18,7 +19,11 @@ class KnowledgeService:
         if content is None:
             return None
 
-        path_obj = self.repo.files_dir.parent / file_path if not file_path.startswith(str(self.repo.base_dir)) else None
+        if not file_path.startswith(str(self.repo.base_dir)):
+            path_obj = self.repo.base_dir / file_path
+        else:
+            path_obj = Path(file_path)
+            
         if path_obj and path_obj.exists():
             stat = path_obj.stat()
             return {

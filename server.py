@@ -561,21 +561,35 @@ async def upload_video_by_url(request: Request):
 
 @app.get("/api/video/{path:path}", response_class=FileResponse)
 async def get_video(path: str, thumbnail: bool = False):
+    print(f"[Server] 请求视频文件: path={path}, thumbnail={thumbnail}")
     file_path = get_file_path(path)
+    print(f"[Server] 完整文件路径: {file_path}")
+    print(f"[Server] 文件是否存在: {file_path.exists()}")
     
     # 如果请求缩略图，返回对应的jpg文件
     if thumbnail:
         thumbnail_path = file_path.parent / f"{file_path.stem}.jpg"
+        print(f"[Server] 缩略图路径: {thumbnail_path}, 是否存在: {thumbnail_path.exists()}")
         if thumbnail_path.exists():
             return FileResponse(thumbnail_path, media_type="image/jpeg")
         else:
             raise HTTPException(status_code=404, detail="缩略图不存在")
     
-    if file_path.suffix.lower() == ".mp4":
-        return FileResponse(file_path, media_type="video/mp4")
-    elif file_path.suffix.lower() == ".jpg":
-        return FileResponse(file_path, media_type="image/jpeg")
+    if file_path.exists():
+        if file_path.suffix.lower() == ".mp4":
+            print(f"[Server] 返回MP4文件")
+            return FileResponse(file_path, media_type="video/mp4")
+        elif file_path.suffix.lower() == ".jpg":
+            print(f"[Server] 返回JPG文件")
+            return FileResponse(file_path, media_type="image/jpeg")
+        else:
+            print(f"[Server] 不支持的文件类型: {file_path.suffix}")
+            raise HTTPException(status_code=404, detail="文件不存在")
     else:
+        print(f"[Server] 文件不存在: {file_path}")
+        # 列出父目录下的文件用于调试
+        if file_path.parent.exists():
+            print(f"[Server] 父目录内容: {list(file_path.parent.iterdir())}")
         raise HTTPException(status_code=404, detail="文件不存在")
 
 

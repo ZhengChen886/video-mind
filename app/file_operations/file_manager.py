@@ -4,30 +4,7 @@ import subprocess
 import uuid
 from pathlib import Path
 from typing import List, Dict, Any
-
-
-def get_video_duration(video_path: str) -> float:
-    """
-    获取视频文件的时长
-    
-    Args:
-        video_path: 视频文件路径
-        
-    Returns:
-        视频时长（秒）
-    """
-    try:
-        result = subprocess.run(
-            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", video_path],
-            capture_output=True,
-            text=True,
-            encoding='utf-8'
-        )
-        if result.returncode == 0:
-            return float(result.stdout.strip())
-    except Exception as e:
-        print(f"[File Manager] 获取视频时长失败: {e}")
-    return 0.0
+from .video_processor import get_video_duration
 
 # 默认视频存储目录
 VIDEO_DIR = Path(__file__).parent / "mp4"
