@@ -173,6 +173,18 @@ const KnowledgeAPI = {
             method: 'POST',
             body: JSON.stringify({ file_path: filePath, target_folder_path: targetFolderPath })
         });
+    },
+
+    // TTS 相关 API
+    async getTTSVoices() {
+        return this.request('/knowledge/tts/voices');
+    },
+
+    async convertTextToSpeech(text, voice = 'zh-CN-XiaoxiaoNeural') {
+        return this.request('/knowledge/tts/convert', {
+            method: 'POST',
+            body: JSON.stringify({ text, voice })
+        });
     }
 };
 

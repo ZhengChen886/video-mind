@@ -9,7 +9,18 @@ const KnowledgeApp = {
         isLoading: false,
         expandedFolders: new Set(), // 展开的文件夹集合
         searchQuery: '', // 搜索关键词
-        sidebarCollapsed: false // 侧边栏状态
+        sidebarCollapsed: false, // 侧边栏状态
+        // TTS 相关状态
+        ttsVoices: [],
+        ttsSelectedVoice: 'zh-CN-XiaoxiaoNeural',
+        ttsAudio: null,
+        ttsIsPlaying: false,
+        ttsIsPaused: false,
+        ttsCurrentTime: 0,
+        ttsDuration: 0,
+        ttsIsConverting: false,
+        ttsPlayingIndex: null, // 当前正在播放的消息索引
+        ttsPlayingMode: 'doc' // 播放模式: 'doc' 或 'message'
     },
 
     api: null,
@@ -18,6 +29,7 @@ const KnowledgeApp = {
         this.api = window.KnowledgeAPI;
         this.bindEvents();
         this.loadInitialData();
+        this.loadTTSVoices();
         
         // 默认展开左侧边栏
         this.toggleLeftSidebar(true);
@@ -29,6 +41,56 @@ const KnowledgeApp = {
     },
 
     bindEvents() {
+        // TTS 控制按钮和音色选择事件
+        document.addEventListener('click', (e) => {
+            // 文档面板的播放按钮
+            if (e.target.closest('#btn-tts-play')) {
+                this.startTTS('doc');
+            }
+            // 单条消息的播放按钮
+            if (e.target.closest('.btn-tts-message-play')) {
+                const btn = e.target.closest('.btn-tts-message-play');
+                const index = parseInt(btn.dataset.messageIndex);
+                this.startTTS('message', index);
+            }
+            // 文档面板的暂停按钮
+            if (e.target.closest('#btn-tts-pause')) {
+                this.pauseTTS();
+            }
+            // 单条消息的暂停按钮
+            if (e.target.closest('.btn-tts-message-pause')) {
+                this.pauseTTS();
+            }
+            // 文档面板的停止按钮
+            if (e.target.closest('#btn-tts-stop')) {
+                this.stopTTS();
+            }
+            // 单条消息的停止按钮
+            if (e.target.closest('.btn-tts-message-stop')) {
+                this.stopTTS();
+            }
+        });
+
+        // TTS 音色选择事件
+        document.addEventListener('change', (e) => {
+            if (e.target && e.target.id === 'tts-voice-select') {
+                this.state.ttsSelectedVoice = e.target.value;
+                this.renderTTSVoiceSelect();
+            }
+        });
+
+        // TTS 进度条事件
+        const ttsProgress = document.getElementById('tts-progress');
+        if (ttsProgress) {
+            ttsProgress.addEventListener('input', (e) => {
+                if (this.state.ttsAudio) {
+                    this.state.ttsAudio.currentTime = e.target.value;
+                    this.state.ttsCurrentTime = parseFloat(e.target.value);
+                    this.updateTTSProgress();
+                }
+            });
+        }
+
         document.addEventListener('click', (e) => {
             if (e.target.closest('#btn-upload-doc')) {
                 this.triggerFileUpload();
@@ -670,7 +732,7 @@ const KnowledgeApp = {
         }
 
         let html = '';
-        this.state.messages.forEach(msg => {
+        this.state.messages.forEach((msg, index) => {
             let contentHtml;
             let contentClass;
             if (msg.role === 'assistant') {
@@ -681,7 +743,7 @@ const KnowledgeApp = {
                 contentClass = 'message-content';
             }
             
-            html += `<div class="chat-message ${msg.role}" data-content="${this.escapeHtml(msg.content)}">`;
+            html += `<div class="chat-message ${msg.role}" data-content="${this.escapeHtml(msg.content)}" data-index="${index}">`;
             if (msg.role === 'assistant') {
                 html += `<div class="message-actions">
                         <button class="btn-favorite" title="收藏">
@@ -692,6 +754,29 @@ const KnowledgeApp = {
                     </div>`;
             }
             html += `<div class="${contentClass}">${contentHtml}</div>`;
+            // 添加 TTS 按钮
+            if (msg.role === 'assistant') {
+                const isCurrentlyPlaying = this.state.ttsIsPlaying && this.state.ttsPlayingIndex === index;
+                const isPaused = this.state.ttsIsPaused && this.state.ttsPlayingIndex === index;
+                html += `<div class="message-tts-controls">
+                            <button class="btn-icon btn-tts-message-play" data-message-index="${index}" title="播放" style="${isCurrentlyPlaying ? 'display:none' : 'inline-flex'}">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polygon points="5 3 19 12 5 21 5 3"/>
+                                </svg>
+                            </button>
+                            <button class="btn-icon btn-tts-message-pause" data-message-index="${index}" title="暂停" style="${(isCurrentlyPlaying && !isPaused) ? 'inline-flex' : 'display:none'}">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="6" y="4" width="4" height="16"/>
+                                    <rect x="14" y="4" width="4" height="16"/>
+                                </svg>
+                            </button>
+                            <button class="btn-icon btn-tts-message-stop" data-message-index="${index}" title="停止">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="3" y="3" width="18" height="18"/>
+                                </svg>
+                            </button>
+                        </div>`;
+            }
             html += '</div>';
         });
         
@@ -954,6 +1039,204 @@ const KnowledgeApp = {
         } catch (error) {
             this.showToast('删除失败', 'error');
         }
+    },
+
+    // TTS 相关方法
+    async loadTTSVoices() {
+        try {
+            const response = await this.api.getTTSVoices();
+            if (response.success) {
+                this.state.ttsVoices = response.data;
+                this.renderTTSVoiceSelect();
+            }
+        } catch (error) {
+            console.error('加载音色列表失败:', error);
+        }
+    },
+
+    renderTTSVoiceSelect() {
+        // 渲染文档面板的音色选择器
+        const select = document.getElementById('tts-voice-select');
+        if (select) {
+            select.innerHTML = this.state.ttsVoices.map(voice => 
+                `<option value="${voice.code}" ${voice.code === this.state.ttsSelectedVoice ? 'selected' : ''}>${voice.name}</option>`
+            ).join('');
+        }
+    },
+
+    async startTTS(mode = 'doc', messageIndex = null) {
+        let textToConvert = '';
+        let warningMessage = '';
+
+        if (mode === 'doc') {
+            // 播放文档内容
+            if (!this.state.currentDoc) {
+                this.showToast('请先选择文档', 'warning');
+                return;
+            }
+            textToConvert = this.state.currentDoc.content;
+            warningMessage = '文档内容为空';
+            this.state.ttsPlayingIndex = null;
+            this.state.ttsPlayingMode = 'doc';
+        } else if (mode === 'message') {
+            // 播放单条消息内容
+            if (messageIndex === null || !this.state.messages[messageIndex]) {
+                this.showToast('消息不存在', 'warning');
+                return;
+            }
+            const msg = this.state.messages[messageIndex];
+            if (msg.role !== 'assistant') {
+                this.showToast('只能播放助手回复', 'warning');
+                return;
+            }
+            textToConvert = msg.content;
+            warningMessage = '消息内容为空';
+            this.state.ttsPlayingIndex = messageIndex;
+            this.state.ttsPlayingMode = 'message';
+        }
+
+        if (!textToConvert.trim()) {
+            this.showToast(warningMessage, 'warning');
+            return;
+        }
+
+        if (this.state.ttsIsPaused && this.state.ttsAudio && this.state.ttsPlayingMode === mode) {
+            this.state.ttsAudio.play();
+            this.state.ttsIsPlaying = true;
+            this.state.ttsIsPaused = false;
+            this.updateTTSControls();
+            return;
+        }
+
+        if (this.state.ttsAudio && this.state.ttsIsConverting) {
+            return;
+        }
+
+        try {
+            this.state.ttsIsConverting = true;
+            this.showToast('正在转换语音...', 'info');
+            
+            const response = await this.api.convertTextToSpeech(
+                textToConvert,
+                this.state.ttsSelectedVoice
+            );
+
+            if (response.success) {
+                this.playTTSAudio(response.data.audio_url);
+                this.showToast('语音转换成功', 'success');
+            } else {
+                this.showToast(response.error || '语音转换失败', 'error');
+            }
+        } catch (error) {
+            this.showToast('语音转换失败: ' + error.message, 'error');
+        } finally {
+            this.state.ttsIsConverting = false;
+        }
+    },
+
+    playTTSAudio(audioUrl) {
+        if (this.state.ttsAudio) {
+            this.state.ttsAudio.pause();
+            this.state.ttsAudio = null;
+        }
+
+        this.state.ttsAudio = new Audio(audioUrl);
+        this.state.ttsIsPlaying = true;
+        this.state.ttsIsPaused = false;
+
+        this.state.ttsAudio.addEventListener('loadedmetadata', () => {
+            this.state.ttsDuration = this.state.ttsAudio.duration;
+            this.updateTTSProgress();
+        });
+
+        this.state.ttsAudio.addEventListener('timeupdate', () => {
+            this.state.ttsCurrentTime = this.state.ttsAudio.currentTime;
+            this.updateTTSProgress();
+        });
+
+        this.state.ttsAudio.addEventListener('ended', () => {
+            this.state.ttsIsPlaying = false;
+            this.state.ttsIsPaused = false;
+            this.updateTTSControls();
+        });
+
+        this.state.ttsAudio.addEventListener('error', () => {
+            this.state.ttsIsPlaying = false;
+            this.state.ttsIsPaused = false;
+            this.updateTTSControls();
+            this.showToast('音频播放失败', 'error');
+        });
+
+        this.state.ttsAudio.play().catch(error => {
+            this.showToast('音频播放失败: ' + error.message, 'error');
+            this.state.ttsIsPlaying = false;
+        });
+
+        this.updateTTSControls();
+    },
+
+    pauseTTS() {
+        if (this.state.ttsAudio && this.state.ttsIsPlaying) {
+            this.state.ttsAudio.pause();
+            this.state.ttsIsPlaying = false;
+            this.state.ttsIsPaused = true;
+            this.updateTTSControls();
+        }
+    },
+
+    stopTTS() {
+        if (this.state.ttsAudio) {
+            this.state.ttsAudio.pause();
+            this.state.ttsAudio.currentTime = 0;
+            this.state.ttsAudio = null;
+        }
+        this.state.ttsIsPlaying = false;
+        this.state.ttsIsPaused = false;
+        this.state.ttsCurrentTime = 0;
+        this.state.ttsDuration = 0;
+        this.state.ttsPlayingIndex = null;
+        this.state.ttsPlayingMode = 'doc';
+        this.updateTTSControls();
+        this.updateTTSProgress();
+    },
+
+    updateTTSProgress() {
+        // 更新文档面板的进度条
+        const progressBar = document.getElementById('tts-progress');
+        const timeLabel = document.getElementById('tts-time');
+        
+        if (progressBar) {
+            progressBar.max = this.state.ttsDuration || 0;
+            progressBar.value = this.state.ttsCurrentTime || 0;
+        }
+        if (timeLabel) {
+            const current = this.formatTime(this.state.ttsCurrentTime);
+            const total = this.formatTime(this.state.ttsDuration);
+            timeLabel.textContent = `${current} / ${total}`;
+        }
+    },
+
+    updateTTSControls() {
+        // 更新文档面板的控制按钮
+        const playBtn = document.getElementById('btn-tts-play');
+        const pauseBtn = document.getElementById('btn-tts-pause');
+        
+        if (playBtn) {
+            playBtn.style.display = (this.state.ttsIsPlaying && this.state.ttsPlayingMode === 'doc') ? 'none' : 'inline-flex';
+        }
+        if (pauseBtn) {
+            pauseBtn.style.display = (this.state.ttsIsPlaying && this.state.ttsPlayingMode === 'doc') ? 'inline-flex' : 'none';
+        }
+
+        // 重新渲染消息列表以更新消息内的 TTS 按钮
+        this.renderChatMessages();
+    },
+
+    formatTime(seconds) {
+        if (!seconds || isNaN(seconds)) return '0:00';
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
     }
 };
 
