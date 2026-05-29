@@ -488,6 +488,12 @@ const KnowledgeApp = {
 
     async selectDocument(filePath) {
         try {
+            // 检查是否有正在播放的音频
+            if (this.state.ttsIsPlaying || this.state.ttsIsPaused) {
+                this.stopTTS();
+                this.showToast('已停止当前音频播放', 'info');
+            }
+            
             this.state.isLoading = true;
             const response = await this.api.getFile(filePath);
             if (response.success) {

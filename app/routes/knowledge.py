@@ -2,7 +2,9 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, Request
 from fastapi.responses import JSONResponse, FileResponse
 from typing import List, Optional
 import os
+import uuid
 from pydantic import BaseModel
+from pathlib import Path
 
 import config.config_manager as config_manager
 
@@ -11,6 +13,14 @@ from app.rag.chat_service import RAGChatService
 from app.models.knowledge import (
     ChatRequest, ChatResponse, IndexRequest, IndexResponse,
     FileSaveRequest, FavoriteRequest, RenameConversationRequest
+)
+from app.speech_text.tts import (
+    get_supported_voices, clean_markdown_text,
+    text_to_audio_with_resume, CHUNK_SIZE
+)
+from app.speech_text.tts_cache import (
+    ensure_dirs, compute_text_hash, find_cached_audio,
+    add_to_cache, get_audio_path, get_temp_dir, cleanup_temp_cache
 )
 
 
@@ -384,3 +394,113 @@ async def export_favorites():
         return error_response("收藏导出失败")
     except Exception as e:
         return error_response(str(e))
+
+
+# TTS 相关 API
+@router.get("/tts/voices")
+async def get_tts_voices():
+    """获取支持的音色列表"""
+    try:
+        voices = get_supported_voices()
+        return success_response(voices)
+    except Exception as e:
+        return error_response(str(e))
+
+
+class TTSConvertRequest(BaseModel):
+    text: str
+    voice: str = "zh-CN-XiaoxiaoNeural"
+    source_type: Optional[str] = None
+    source_id: Optional[str] = None
+    source_info: Optional[dict] = None
+
+
+@router.post("/tts/convert")
+async def convert_tts(request: TTSConvertRequest):
+    """
+    文本转语音"""
+    try:
+        ensure_dirs()
+        
+        # 清理文本
+        cleaned_text = clean_markdown_text(request.text)
+        
+        if not cleaned_text.strip():
+            return error_response("文本内容为空")
+        
+        # 计算哈希并检查缓存
+        text_hash = compute_text_hash(cleaned_text)
+        cached = find_cached_audio(text_hash, request.voice)
+        
+        if cached:
+            # 命中缓存
+            audio_url = f"/api/knowledge/tts/audio/{cached['audio_file']}"
+            return success_response({
+                "audio_url": audio_url,
+                "cached": True,
+                "audio_file": cached['audio_file']
+            })
+        
+        # 生成输出文件名
+        audio_filename = f"tts_{text_hash[:16]}.mp3"
+        output_path = get_audio_path(audio_filename)
+        
+        # 使用文本哈希作为临时目录名称，实现断点续传
+        voice_suffix = request.voice.replace("-", "_").lower()
+        temp_dir = get_temp_dir() / f"{text_hash}_{voice_suffix}"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        
+        result = text_to_audio_with_resume(
+            text=cleaned_text,
+            output_path=str(output_path),
+            temp_dir=temp_dir,
+            voice=request.voice,
+            chunk_size=CHUNK_SIZE
+        )
+        
+        # 只有成功时才清理临时缓存
+        if result['success']:
+            cleanup_temp_cache(temp_dir)
+        
+        if not result['success']:
+            return error_response(result.get('error', 'TTS 转换失败'))
+        
+        # 添加到缓存
+        file_size = output_path.stat().st_size
+        add_to_cache(
+            text_hash=text_hash,
+            voice=request.voice,
+            audio_file=audio_filename,
+            file_size=file_size,
+            source_type=request.source_type,
+            source_id=request.source_id,
+            source_info=request.source_info
+        )
+        
+        audio_url = f"/api/knowledge/tts/audio/{audio_filename}"
+        return success_response({
+            "audio_url": audio_url,
+            "cached": False,
+            "audio_file": audio_filename
+        })
+        
+    except Exception as e:
+        return error_response(str(e))
+
+
+@router.get("/tts/audio/{filename}")
+async def get_tts_audio(filename: str):
+    """获取 TTS 音频文件"""
+    try:
+        audio_path = get_audio_path(filename)
+        if not audio_path.exists():
+            raise HTTPException(status_code=404, detail="音频文件不存在")
+        return FileResponse(
+            path=str(audio_path),
+            media_type="audio/mpeg",
+            filename=filename
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

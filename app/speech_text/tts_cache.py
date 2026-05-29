@@ -2,6 +2,7 @@ import os
 import json
 import hashlib
 import time
+import shutil
 from pathlib import Path
 from typing import Dict, List, Optional
 import platform
@@ -108,25 +109,46 @@ def find_cached_audio(text_hash: str, voice: str) -> Optional[Dict]:
 
 
 def add_to_cache(
-    original_text: str,
-    cleaned_text: str,
+    text_hash: str,
     voice: str,
     audio_file: str,
-    file_size: int
+    file_size: int,
+    source_type: Optional[str] = None,
+    source_id: Optional[str] = None,
+    source_info: Optional[Dict] = None
 ) -> Dict:
-    """添加新的缓存项"""
+    """
+    添加新的缓存项
+    
+    Args:
+        text_hash: 文本哈希值
+        voice: 音色
+        audio_file: 音频文件名
+        file_size: 文件大小
+        source_type: 来源类型 (doc/message)
+        source_id: 来源ID
+        source_info: 来源详细信息
+    
+    Returns:
+        缓存项
+    """
     ensure_dirs()
-    text_hash = compute_text_hash(cleaned_text)
     
     cache_item = {
         "hash": text_hash,
-        "original_text": original_text,
-        "cleaned_text": cleaned_text,
         "voice": voice,
         "audio_file": audio_file,
         "created_at": time.time(),
         "size": file_size
     }
+    
+    # 添加来源信息
+    if source_type:
+        cache_item["source_type"] = source_type
+    if source_id:
+        cache_item["source_id"] = source_id
+    if source_info:
+        cache_item["source_info"] = source_info
     
     # 加锁保护元数据操作
     lock_fd = None
@@ -226,6 +248,22 @@ def delete_cache(text_hash: str, voice: str) -> bool:
     finally:
         if lock_fd:
             _release_file_lock(lock_fd)
+
+
+def cleanup_temp_cache(temp_dir: Optional[Path] = None):
+    """
+    清理临时缓存文件
+    
+    Args:
+        temp_dir: 临时目录，如果为 None 则使用默认的 TEMP_DIR
+    """
+    temp_dir = temp_dir or TEMP_DIR
+    if temp_dir.exists():
+        try:
+            shutil.rmtree(temp_dir)
+            temp_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            print(f"[TTS Cache] 清理临时缓存失败: {e}")
 
 
 def get_cache_list() -> List[Dict]:
