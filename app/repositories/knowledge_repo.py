@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Dict, Any
-from config.paths import KNOWLEDGE_DIR
+from config.paths import KNOWLEDGE_DIR, KNOWLEDGE_DATA_DIR
 
 
 class KnowledgeRepository:
@@ -13,9 +13,9 @@ class KnowledgeRepository:
             self.base_dir = KNOWLEDGE_DIR
         else:
             self.base_dir = Path(base_dir)
-        self.files_dir = self.base_dir / "files"
-        self.conversations_dir = self.base_dir / "conversations"
-        self.favorites_file = self.base_dir / "favorites.json"
+        self.files_dir = self.base_dir  # 直接使用 mp4 目录
+        self.conversations_dir = KNOWLEDGE_DATA_DIR / "conversations"
+        self.favorites_file = KNOWLEDGE_DATA_DIR / "favorites.json"
 
         self._ensure_dirs()
 

@@ -15,7 +15,8 @@ WEB_DIR = PROJECT_ROOT / "web"
 
 # 数据目录
 VIDEO_DIR = DATA_DIR / "mp4"  # 视频存储目录
-KNOWLEDGE_DIR = DATA_DIR / "knowledge"  # 知识库目录
+KNOWLEDGE_DIR = DATA_DIR / "mp4"  # 知识库文档目录（使用 mp4）
+KNOWLEDGE_DATA_DIR = DATA_DIR / "knowledge"  # 知识库数据目录（对话、收藏）
 TTS_CACHE_DIR = DATA_DIR / "tts_cache"  # TTS缓存目录
 TTS_AUDIO_DIR = TTS_CACHE_DIR / "audio"  # TTS音频目录
 TTS_TEMP_DIR = TTS_CACHE_DIR / "temp"  # TTS临时文件目录
