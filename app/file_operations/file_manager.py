@@ -5,9 +5,7 @@ import uuid
 from pathlib import Path
 from typing import List, Dict, Any
 from .video_processor import get_video_duration
-
-# 默认视频存储目录
-VIDEO_DIR = Path(__file__).parent / "mp4"
+from config.paths import VIDEO_DIR
 
 # 支持的视频格式
 SUPPORTED_VIDEO_EXTENSIONS = {".mp4", ".m4v", ".webm", ".mov", ".avi", ".wmv", ".flv", ".mkv"}

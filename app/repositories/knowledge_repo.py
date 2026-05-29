@@ -4,11 +4,15 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Dict, Any
+from config.paths import KNOWLEDGE_DIR
 
 
 class KnowledgeRepository:
-    def __init__(self, base_dir: str = "app/knowledge"):
-        self.base_dir = Path(base_dir)
+    def __init__(self, base_dir: str = None):
+        if base_dir is None:
+            self.base_dir = KNOWLEDGE_DIR
+        else:
+            self.base_dir = Path(base_dir)
         self.files_dir = self.base_dir / "files"
         self.conversations_dir = self.base_dir / "conversations"
         self.favorites_file = self.base_dir / "favorites.json"

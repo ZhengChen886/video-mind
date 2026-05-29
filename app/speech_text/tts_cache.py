@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional
 import platform
+from config.paths import TTS_CACHE_DIR, TTS_AUDIO_DIR, TTS_TEMP_DIR
 
 
 # 配置参数
@@ -13,11 +14,10 @@ MAX_CACHE_FILES = 100  # 最大缓存文件数
 MAX_CACHE_DAYS = 3  # 缓存保留天数
 
 
-# 获取项目根目录
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-CACHE_DIR = PROJECT_ROOT / "data" / "tts_cache"
-AUDIO_DIR = CACHE_DIR / "audio"
-TEMP_DIR = CACHE_DIR / "temp"
+# 从配置文件导入路径
+CACHE_DIR = TTS_CACHE_DIR
+AUDIO_DIR = TTS_AUDIO_DIR
+TEMP_DIR = TTS_TEMP_DIR
 METADATA_FILE = CACHE_DIR / "cache_metadata.json"
 
 

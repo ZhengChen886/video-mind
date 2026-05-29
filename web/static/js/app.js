@@ -554,6 +554,7 @@ function bindSidebarEvents() {
             // 只移除子菜单项的 active 类，排除父菜单项
             document.querySelectorAll('.menu-item:not(.menu-item-parent)').forEach(i => i.classList.remove('active'));
             item.classList.add('active');
+            isShowingDocuments = false;
             currentPath = item.dataset.path;
             loadFiles();
         });
@@ -2171,7 +2172,6 @@ function bindEvents() {
                 // 获取文档类型
                 const docType = item.dataset.docType;
                 
-                // 更新路径显示
                 const docTypeNames = {
                     'all': '全部文档',
                     'subtitle': '原文',
@@ -2179,7 +2179,10 @@ function bindEvents() {
                     'outline': '大纲',
                     'notes': '笔记'
                 };
-                document.getElementById('currentPath').textContent = docTypeNames[docType] || '全部文档';
+                const currentPathEl = document.getElementById('currentPath');
+                if (currentPathEl) {
+                    currentPathEl.textContent = docTypeNames[docType] || '全部文档';
+                }
                 
                 // 加载对应类型的文档
                 loadDocuments(docType);

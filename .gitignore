@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Project data and config
+data/
+.trae/
+vector_db/
+config/config.json
