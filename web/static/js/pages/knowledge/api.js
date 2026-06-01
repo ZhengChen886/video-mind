@@ -185,6 +185,11 @@ const KnowledgeAPI = {
             method: 'POST',
             body: JSON.stringify({ text, voice })
         });
+    },
+
+    // Tool Calling 相关 API
+    async listTools() {
+        return this.request('/knowledge/tools');
     }
 };
 

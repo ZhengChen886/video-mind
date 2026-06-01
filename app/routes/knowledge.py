@@ -3,10 +3,13 @@ from fastapi.responses import JSONResponse, FileResponse
 from typing import List, Optional
 import os
 import uuid
+import logging
 from pydantic import BaseModel
 from pathlib import Path
 
 import config.config_manager as config_manager
+
+logger = logging.getLogger(__name__)
 
 from app.services.knowledge_service import KnowledgeService
 from app.rag.chat_service import RAGChatService
@@ -14,6 +17,8 @@ from app.models.knowledge import (
     ChatRequest, ChatResponse, IndexRequest, IndexResponse,
     FileSaveRequest, FavoriteRequest, RenameConversationRequest
 )
+# 导入工具系统（触发注册）
+from app.tools import get_all_registered_tool_names
 from app.speech_text.tts import (
     get_supported_voices, clean_markdown_text,
     text_to_audio_with_resume, CHUNK_SIZE
@@ -164,6 +169,31 @@ async def delete_file(path: str):
         return error_response(str(e))
 
 
+@router.get("/tools")
+async def list_available_tools():
+    """获取当前可用的工具列表（供前端展示）"""
+    try:
+        from app.tools.registry import registry
+        tools = []
+        for tool in registry.get_all():
+            tools.append({
+                "name": tool.name,
+                "description": tool.description,
+                "parameters": [
+                    {
+                        "name": p.name,
+                        "type": p.type,
+                        "description": p.description,
+                        "required": p.required,
+                    }
+                    for p in tool.parameters
+                ]
+            })
+        return success_response({"tools": tools, "count": len(tools)})
+    except Exception as e:
+        return error_response(str(e))
+
+
 @router.post("/index")
 async def index_document(request: IndexRequest):
     try:
@@ -202,7 +232,8 @@ async def chat(request: ChatRequest):
             history=request.history,
             doc_id=request.doc_id,
             doc_content=doc.get("content", ""),
-            doc_name=doc.get("name", "")
+            doc_name=doc.get("name", ""),
+            enable_tools=True,  # 启用 Tool Calling
         )
 
         config = config_manager.load_config()
@@ -217,15 +248,31 @@ async def chat(request: ChatRequest):
         try:
             from openai import OpenAI
             client = OpenAI(base_url=api_url, api_key=api_key)
-            response = client.chat.completions.create(
+            
+            # 使用 Tool Calling 对话（如果模型支持）
+            answer = await rag_service.chat_with_tools(
+                client=client,
                 model=model,
                 messages=messages,
+                doc_content=doc.get("content", ""),
                 temperature=0.7,
-                max_tokens=2000
+                max_tokens=2000,
             )
-            answer = response.choices[0].message.content
         except Exception as e:
-            answer = f"AI 调用失败: {str(e)}"
+            # Tool Calling 失败时 fallback 到普通调用
+            logger.error(f"Tool Calling 失败，回退到普通模式: {e}")
+            try:
+                from openai import OpenAI
+                client = OpenAI(base_url=api_url, api_key=api_key)
+                response = client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    temperature=0.7,
+                    max_tokens=2000
+                )
+                answer = response.choices[0].message.content or f"AI 调用失败: {str(e)}"
+            except Exception as e2:
+                answer = f"AI 调用失败: {str(e2)}"
 
         # 如果有 conv_id，尝试加载现有对话并更新
         if request.conv_id:

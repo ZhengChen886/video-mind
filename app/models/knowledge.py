@@ -43,6 +43,7 @@ class ChatRequest(BaseModel):
     history: List[Dict[str, str]] = []
     model: Optional[str] = None
     conv_id: Optional[str] = None
+    enable_tools: Optional[bool] = True  # 是否启用 Tool Calling
 
 
 class ChatResponse(BaseModel):
