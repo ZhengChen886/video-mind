@@ -190,6 +190,28 @@ const KnowledgeAPI = {
     // Tool Calling 相关 API
     async listTools() {
         return this.request('/knowledge/tools');
+    },
+
+    // 模型相关 API
+    async getModels(providerId = null) {
+        const url = providerId 
+            ? `/knowledge/models?provider_id=${encodeURIComponent(providerId)}`
+            : '/knowledge/models';
+        return this.request(url);
+    },
+
+    async fetchModelsFromAPI(apiUrl, apiKey) {
+        return this.request('/knowledge/models/fetch', {
+            method: 'POST',
+            body: JSON.stringify({ api_url: apiUrl, api_key: apiKey })
+        });
+    },
+
+    async saveModels(providerId, models) {
+        return this.request('/knowledge/models/save', {
+            method: 'POST',
+            body: JSON.stringify({ provider_id: providerId, models: models })
+        });
     }
 };
 

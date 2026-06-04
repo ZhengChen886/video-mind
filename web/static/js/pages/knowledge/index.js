@@ -20,7 +20,10 @@ const KnowledgeApp = {
         ttsDuration: 0,
         ttsIsConverting: false,
         ttsPlayingIndex: null, // 当前正在播放的消息索引
-        ttsPlayingMode: 'doc' // 播放模式: 'doc' 或 'message'
+        ttsPlayingMode: 'doc', // 播放模式: 'doc' 或 'message'
+        // 模型相关状态
+        availableModels: [],
+        selectedModel: null
     },
 
     api: null,
@@ -30,6 +33,7 @@ const KnowledgeApp = {
         this.bindEvents();
         this.loadInitialData();
         this.loadTTSVoices();
+        this.loadModels();
         
         // 默认展开左侧边栏
         this.toggleLeftSidebar(true);
@@ -228,6 +232,34 @@ const KnowledgeApp = {
                 }
             });
         }
+
+        // 模型选择器事件
+        const modelButton = document.getElementById('chat-model-button');
+        const modelMenu = document.getElementById('chat-model-menu');
+        if (modelButton && modelMenu) {
+            modelButton.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const isOpen = modelMenu.style.display === 'block';
+                modelMenu.style.display = isOpen ? 'none' : 'block';
+            });
+            // 点击其他地方关闭菜单
+            document.addEventListener('click', (e) => {
+                if (!modelMenu.contains(e.target) && e.target !== modelButton) {
+                    modelMenu.style.display = 'none';
+                }
+            });
+        }
+
+        // 委托：模型菜单项点击
+        document.addEventListener('click', (e) => {
+            const item = e.target.closest('.chat-model-menu-item');
+            if (item && modelMenu && modelMenu.contains(item)) {
+                const modelId = item.dataset.modelId || null;
+                this.state.selectedModel = modelId;
+                this.updateModelButtonText();
+                if (modelMenu) modelMenu.style.display = 'none';
+            }
+        });
     },
 
     async loadInitialData() {
@@ -236,6 +268,77 @@ const KnowledgeApp = {
             this.loadConversations(),
             this.loadFavorites()
         ]);
+    },
+
+    async loadModels() {
+        try {
+            const response = await this.api.getModels();
+            if (response.success) {
+                this.state.availableModels = response.models || [];
+                this.renderModelSelect();
+            }
+        } catch (error) {
+            console.error('加载模型列表失败:', error);
+        }
+    },
+
+    renderModelSelect() {
+        const menu = document.getElementById('chat-model-menu');
+        if (!menu) return;
+
+        const models = this.state.availableModels || [];
+        // 第一个固定为“使用默认模型”
+        let html = `
+            <div class="chat-model-menu-item ${!this.state.selectedModel ? 'active' : ''}" data-model-id="">
+                <div>
+                    <div class="chat-model-menu-title">使用默认模型</div>
+                    <div class="chat-model-menu-desc">使用当前激活提供商的默认模型</div>
+                </div>
+                ${!this.state.selectedModel ? '<svg class="chat-model-menu-check" viewBox="0 0 24 24" style="width:16px;height:16px" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
+            </div>
+        `;
+
+        if (models.length === 0) {
+            html += `<div class="chat-model-menu-empty">暂无可用模型，请到设置中获取</div>`;
+        } else {
+            models.forEach(model => {
+                const isActive = this.state.selectedModel === model.id;
+                const desc = model.owned_by ? `提供方：${model.owned_by}` : '点击切换至该模型';
+                html += `
+                    <div class="chat-model-menu-item ${isActive ? 'active' : ''}" data-model-id="${this.escapeHtml(model.id)}">
+                        <div>
+                            <div class="chat-model-menu-title">${this.escapeHtml(model.name || model.id)}</div>
+                            <div class="chat-model-menu-desc">${this.escapeHtml(desc)}</div>
+                        </div>
+                        ${isActive ? '<svg class="chat-model-menu-check" viewBox="0 0 24 24" style="width:16px;height:16px" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
+                    </div>
+                `;
+            });
+        }
+
+        menu.innerHTML = html;
+        this.updateModelButtonText();
+    },
+
+    updateModelButtonText() {
+        const textEl = document.getElementById('chat-model-button-text');
+        if (!textEl) return;
+        if (!this.state.selectedModel) {
+            textEl.textContent = '使用默认模型';
+            return;
+        }
+        const model = (this.state.availableModels || []).find(m => m.id === this.state.selectedModel);
+        textEl.textContent = (model && (model.name || model.id)) || this.state.selectedModel;
+    },
+
+    escapeHtml(s) {
+        if (s == null) return '';
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     },
 
     async loadFiles() {
@@ -690,12 +793,13 @@ const KnowledgeApp = {
             // 发送请求时，使用添加消息之前的历史（不包含刚添加的这条）
             const historyBeforeAdd = this.state.messages.slice(0, -1);
             const currentConvId = this.state.currentConversation?.id;
+            const modelToUse = this.state.selectedModel;
             
             const response = await this.api.chat(
                 this.state.currentDoc.path,
                 question,
                 historyBeforeAdd.slice(-20),
-                null,
+                modelToUse,
                 currentConvId
             );
 
@@ -1247,3 +1351,4 @@ const KnowledgeApp = {
 };
 
 window.KnowledgeApp = KnowledgeApp;
+window.knowledgePage = KnowledgeApp; // 兼容旧引用

@@ -862,6 +862,31 @@
     color: var(--text-primary, #333);
 }
 
+/* sidebar-user 下拉菜单支持（独立容器，position: fixed 避免 overflow 裁剪） */
+.sidebar-user {
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.sidebar-user:hover {
+    background: var(--hover-bg, #e2e8f0);
+}
+
+.sidebar-user-dropdown {
+    position: fixed;
+    z-index: 1001;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+    padding: 8px;
+    display: none;
+    min-width: 180px;
+}
+
+.sidebar-user-dropdown.show {
+    display: block;
+}
+
 /* 新增：收藏入口 */
 .sidebar-favorites-entry {
     display: flex;

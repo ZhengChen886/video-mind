@@ -307,12 +307,13 @@ def get_files_by_extensions(extensions: set) -> List[Dict[str, Any]]:
             ext = Path(file).suffix.lower()
             if ext in extensions:
                 full_path = Path(root) / file
+                stat_result = full_path.stat()
                 result.append({
                     "name": file,
                     "path": str(full_path.relative_to(VIDEO_DIR)),
                     "directory": str(Path(root).relative_to(VIDEO_DIR)),
-                    "size": full_path.stat().st_size,
-                    "modified": full_path.stat().st_mtime,
+                    "size": stat_result.st_size,
+                    "modified": stat_result.st_mtime,
                     "extension": ext
                 })
     

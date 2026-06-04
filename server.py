@@ -1,8 +1,5 @@
 import uuid
-import shutil
-import json
 import requests
-import asyncio
 import threading
 from pathlib import Path
 from contextlib import asynccontextmanager
@@ -1295,7 +1292,9 @@ async def get_config():
             "name": provider.get("name", ""),
             "api_url": provider.get("api_url", ""),
             "api_key": "***" if provider.get("api_key", "") else "",
-            "default_model": provider.get("default_model", "")
+            "models_url": provider.get("models_url", ""),
+            "default_model": provider.get("default_model", ""),
+            "models": provider.get("models", [])
         }
 
     return {
@@ -1315,15 +1314,34 @@ async def save_config_api(request: Request):
         active_provider = body.get("active_provider", "open-ai")
         set_initialized = body.get("set_initialized", False)
 
+        print("[Server] 收到保存配置请求")
+        print(f"[Server] 收到的providers: {list(providers.keys())}")
+        print(f"[Server] 收到的active_provider: {active_provider}")
+
         # 合并现有配置
         config = GLOBAL_CONFIG.copy()
+        
+        # 确保providers字段存在
+        if "providers" not in config:
+            config["providers"] = {}
 
+        # 更新或添加每个provider
         for provider_id, provider_data in providers.items():
+            print(f"[Server] 处理provider: {provider_id}")
+            
             if provider_id in config["providers"]:
                 # 如果新的API key是***，则保留原有值
                 if provider_data.get("api_key", "") == "***":
                     provider_data["api_key"] = config["providers"][provider_id]["api_key"]
+                
+                # 保留现有models
+                if "models" in config["providers"][provider_id] and "models" not in provider_data:
+                    provider_data["models"] = config["providers"][provider_id]["models"]
+                
                 config["providers"][provider_id].update(provider_data)
+            else:
+                # 添加新的provider
+                config["providers"][provider_id] = provider_data
 
         config["active_provider"] = active_provider
         
@@ -1331,14 +1349,18 @@ async def save_config_api(request: Request):
         if set_initialized:
             config["initialized"] = True
 
+        print(f"[Server] 准备保存配置，providers: {list(config['providers'].keys())}")
+
         # 保存配置
         if save_config(config):
             GLOBAL_CONFIG = config
+            print("[Server] 配置保存成功")
             return {
                 "success": True,
                 "message": "配置保存成功"
             }
         else:
+            print("[Server] 配置保存失败")
             return JSONResponse(
                 status_code=500,
                 content={
@@ -1347,12 +1369,77 @@ async def save_config_api(request: Request):
                 }
             )
     except Exception as e:
+        print(f"[Server] 保存配置异常: {e}")
+        import traceback
+        traceback.print_exc()
         return JSONResponse(
             status_code=500,
             content={
                 "success": False,
                 "error": str(e)
             }
+        )
+
+
+@app.post("/api/knowledge/models/fetch", response_class=JSONResponse)
+async def fetch_models_api(request: Request):
+    """从API获取模型列表"""
+    try:
+        body = await request.json()
+        api_url = body.get("api_url", "")
+        api_key = body.get("api_key", "")
+        models_url = body.get("models_url", "")
+
+        result = config_manager.fetch_models_from_api(api_url, api_key, models_url)
+        return result
+    except Exception as e:
+        print(f"[Server] 获取模型列表异常: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": str(e)}
+        )
+
+
+@app.post("/api/knowledge/models/save", response_class=JSONResponse)
+async def save_models_api(request: Request):
+    """保存模型列表到配置"""
+    global GLOBAL_CONFIG
+    try:
+        body = await request.json()
+        provider_id = body.get("provider_id", "")
+        models = body.get("models", [])
+        
+        if config_manager.save_provider_models(provider_id, models):
+            GLOBAL_CONFIG = config_manager.load_config()
+            return {"success": True, "message": "模型列表保存成功"}
+        else:
+            return JSONResponse(
+                status_code=500,
+                content={"success": False, "error": "保存模型列表失败"}
+            )
+    except Exception as e:
+        print(f"[Server] 保存模型列表异常: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": str(e)}
+        )
+
+
+@app.get("/api/knowledge/models", response_class=JSONResponse)
+async def get_models_api(provider_id: str = None):
+    """获取已保存的模型列表"""
+    try:
+        if provider_id is None:
+            config = GLOBAL_CONFIG
+            provider_id = config.get("active_provider")
+        
+        models = config_manager.get_provider_models(provider_id)
+        return {"success": True, "models": models, "provider_id": provider_id}
+    except Exception as e:
+        print(f"[Server] 获取模型列表异常: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": str(e)}
         )
 
 

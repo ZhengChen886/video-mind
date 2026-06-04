@@ -133,10 +133,11 @@ def get_video_duration(video_path: str) -> float:
             "-"
         ]
         
-        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', stderr=subprocess.STDOUT)
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore')
         
-        # 从输出中提取时长信息
-        for line in result.stdout.split('\n'):
+        # 从输出中提取时长信息（FFmpeg通常输出到stderr）
+        output = result.stderr or result.stdout
+        for line in output.split('\n'):
             if "Duration:" in line:
                 duration_str = line.split("Duration: ")[1].split(",")[0].strip()
                 h, m, s = duration_str.split(":")

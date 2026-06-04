@@ -4,19 +4,25 @@
       "name": "Open AI",
       "api_url": "",
       "api_key": "",
-      "default_model": ""
+      "models_url": "",
+      "default_model": "",
+      "models": []
     },
     "openroute": {
       "name": "OpenRoute",
       "api_url": "",
       "api_key": "",
-      "default_model": ""
+      "models_url": "",
+      "default_model": "",
+      "models": []
     },
     "nvidia": {
       "name": "NVIDIA",
       "api_url": "",
       "api_key": "",
-      "default_model": ""
+      "models_url": "",
+      "default_model": "",
+      "models": []
     }
   },
   "active_provider": "open-ai",

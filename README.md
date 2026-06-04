@@ -32,15 +32,27 @@ VideoMind 是一个功能强大的本地视频管理与 AI 内容分析工具，
 
 ### 首页仪表盘
 
-简洁直观的首页，快速访问核心功能
+<table align="center">
+  <tr>
+    <td align="center"><img src="./doc/index.png" alt="简洁直观的首页，快速访问核心功能" width="100%" /><br/>简洁直观的首页，快速访问核心功能</td>
+  </tr>
+</table>
 
 ### 视频管理
 
-卡片式与列表式双视图，支持批量操作
+<table align="center">
+  <tr>
+    <td align="center"><img src="./doc/2.png" alt="卡片式与列表式双视图，支持批量操作" width="100%" /><br/>卡片式与列表式双视图，支持批量操作</td>
+  </tr>
+</table>
 
 ### 智能分析
 
-自动转录、总结、生成笔记，一键完成
+<table align="center">
+  <tr>
+    <td align="center"><img src="./doc/3.png" alt="自动转录、总结、生成笔记，一键完成" width="100%" /><br/>自动转录、总结、生成笔记，一键完成</td>
+  </tr>
+</table>
 
 ## 🛠️ 技术栈
 

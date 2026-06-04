@@ -126,6 +126,10 @@ function switchPage(pageName) {
         } else if (pageName === 'knowledge') {
             if (window.KnowledgeApp) {
                 KnowledgeApp.init();
+                // 每次进入知识库页面都重新拉取配置中的模型列表
+                if (typeof KnowledgeApp.loadModels === 'function') {
+                    KnowledgeApp.loadModels();
+                }
             }
         }
     }
@@ -217,8 +221,11 @@ function initGreeting() {
 }
 
 async function loadDashboardCharts() {
-    await loadDistributionChart();
-    await loadTrendsChart(7);
+    // 并行加载两个图表数据
+    await Promise.all([
+        loadDistributionChart(),
+        loadTrendsChart(7)
+    ]);
 }
 
 async function loadDistributionChart() {
@@ -2040,79 +2047,326 @@ function confirmModelSelect() {
 // ============================
 // API Settings
 // ============================
-function openSettingsModal() {
-    editingProvider = appConfig.activeProvider;
-    loadConfigForm(editingProvider);
-    updateProviderTabs();
+async function openSettingsModal() {
     document.getElementById('modalSettings').classList.add('show');
+    await loadConfigFromServer();
 }
 
-function loadConfigForm(providerId) {
-    const provider = appConfig.providers[providerId];
-    document.getElementById('configApiUrl').value = provider.apiUrl || '';
-    document.getElementById('configApiKey').value = provider.apiKey ? '***' : '';
-    document.getElementById('configDefaultModel').value = provider.defaultModel || '';
-}
-
-function updateProviderTabs() {
-    document.querySelectorAll('.provider-tab').forEach(tab => {
-        if (tab.dataset.provider === editingProvider) {
-            tab.classList.add('active');
-        } else {
-            tab.classList.remove('active');
+async function loadConfigFromServer() {
+    try {
+        const response = await fetch('/api/config');
+        const data = await response.json();
+        if (data.success) {
+            currentConfig = data.config;
+            const activeProvider = currentConfig.active_provider || 'open-ai';
+            editingProvider = activeProvider;
+            // 同步 provider tab 激活状态
+            document.querySelectorAll('.provider-tab').forEach(tab => {
+                tab.classList.toggle('active', tab.dataset.provider === activeProvider);
+            });
+            loadProviderConfig(activeProvider);
         }
+    } catch (e) {
+        console.error('Load config failed:', e);
+    }
+}
+
+function loadProviderConfig(providerId) {
+    const provider = currentConfig.providers[providerId];
+    if (!provider) return;
+
+    const urlInput = document.getElementById('configApiUrl');
+    const keyInput = document.getElementById('configApiKey');
+    const modelsUrlInput = document.getElementById('configModelsUrl');
+    const modelSelect = document.getElementById('configDefaultModel');
+
+    if (urlInput) urlInput.value = provider.api_url || '';
+    if (keyInput) keyInput.value = provider.api_key ? '***' : '';
+    if (modelsUrlInput) modelsUrlInput.value = provider.models_url || '';
+
+    // 1. 填充模型下拉框选项
+    loadModelSelectModels(providerId);
+
+    // 2. 渲染模型列表表格
+    renderModelsTable(providerId);
+
+    // 3. 设置默认模型的选中值
+    if (modelSelect) modelSelect.value = provider.default_model || '';
+}
+
+function loadModelSelectModels(providerId) {
+    const modelSelect = document.getElementById('configDefaultModel');
+    if (!modelSelect) return;
+
+    modelSelect.innerHTML = '<option value="">请选择默认模型</option>';
+
+    const provider = currentConfig.providers[providerId];
+    if (provider && Array.isArray(provider.models) && provider.models.length > 0) {
+        provider.models.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model.id;
+            option.textContent = model.name || model.id;
+            modelSelect.appendChild(option);
+        });
+        if (provider.default_model) {
+            modelSelect.value = provider.default_model;
+        }
+    }
+}
+
+function renderModelsTable(providerId) {
+    const tbody = document.getElementById('configModelsTbody');
+    const emptyEl = document.getElementById('configModelsEmpty');
+    if (!tbody || !emptyEl) return;
+
+    const provider = currentConfig.providers[providerId] || { models: [] };
+    const models = provider.models || [];
+    tbody.innerHTML = '';
+
+    if (models.length === 0) {
+        emptyEl.style.display = 'block';
+        return;
+    }
+    emptyEl.style.display = 'none';
+
+    models.forEach((model, idx) => {
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid #f1f5f9';
+        tr.innerHTML = `
+            <td style="padding:6px 10px;">
+                <input type="text" data-field="id" data-index="${idx}" value="${escapeAttr(model.id || '')}" placeholder="模型 ID（必填）" style="width:100%;padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;">
+            </td>
+            <td style="padding:6px 10px;">
+                <input type="text" data-field="name" data-index="${idx}" value="${escapeAttr(model.name || '')}" placeholder="显示名称（可空）" style="width:100%;padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;">
+            </td>
+            <td style="padding:6px 10px;text-align:center;">
+                <button type="button" class="config-model-delete-btn" data-index="${idx}" title="删除" style="background:none;border:none;cursor:pointer;color:#ef4444;font-size:13px;padding:4px 8px;">删除</button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    tbody.querySelectorAll('.config-model-delete-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const idx = parseInt(this.dataset.index, 10);
+            removeModelRow(idx);
+        });
     });
 }
 
+function escapeAttr(s) {
+    if (s == null) return '';
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
 function switchProviderTab(providerId) {
-    saveCurrentProviderConfig();
+    // 切 tab 时直接切换，不做复杂保存
     editingProvider = providerId;
-    loadConfigForm(editingProvider);
-    updateProviderTabs();
+    document.querySelectorAll('.provider-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.provider === providerId);
+    });
+    loadProviderConfig(providerId);
 }
 
-function saveCurrentProviderConfig() {
-    const apiUrl = document.getElementById('configApiUrl').value.trim();
-    const apiKeyInput = document.getElementById('configApiKey').value.trim();
-    const defaultModel = document.getElementById('configDefaultModel').value.trim();
-
-    if (apiKeyInput !== '***') {
-        appConfig.providers[editingProvider].apiKey = apiKeyInput;
-    }
-    appConfig.providers[editingProvider].apiUrl = apiUrl;
-    appConfig.providers[editingProvider].defaultModel = defaultModel;
+function getCurrentEditingProviderId() {
+    const activeTab = document.querySelector('.provider-tab.active');
+    return activeTab ? activeTab.dataset.provider : (currentConfig.active_provider || 'open-ai');
 }
 
-async function saveSettings() {
-    saveCurrentProviderConfig();
-    appConfig.activeProvider = editingProvider;
-    
-    const provider = appConfig.providers[editingProvider];
-    if (provider.defaultModel) {
-        appConfig.currentModel = provider.defaultModel;
-    }
+function addModelRow() {
+    const providerId = getCurrentEditingProviderId();
+    if (!currentConfig.providers[providerId]) currentConfig.providers[providerId] = {};
+    if (!currentConfig.providers[providerId].models) currentConfig.providers[providerId].models = [];
+    currentConfig.providers[providerId].models.push({
+        id: '', name: '', created: 0, owned_by: ''
+    });
+    renderModelsTable(providerId);
+    loadModelSelectModels(providerId);
+}
 
-    saveAppConfig();
-    updateModelDisplay();
+function removeModelRow(idx) {
+    const providerId = getCurrentEditingProviderId();
+    const provider = currentConfig.providers[providerId];
+    if (!provider || !Array.isArray(provider.models)) return;
+    provider.models.splice(idx, 1);
+    renderModelsTable(providerId);
+    loadModelSelectModels(providerId);
+}
+
+async function fetchModels() {
+    const activeTab = document.querySelector('.provider-tab.active');
+    const providerId = activeTab ? activeTab.dataset.provider : null;
+    const apiUrl = document.getElementById('configApiUrl')?.value;
+    const apiKey = document.getElementById('configApiKey')?.value;
+    const modelsUrl = document.getElementById('configModelsUrl')?.value;
+
+    if (!apiKey) { alert('请先填写 API 密钥'); return; }
+    if (!apiUrl && !modelsUrl) { alert('请先填写 API 地址或模型列表 URL'); return; }
+
+    const btn = document.getElementById('fetchModelsBtn');
+    const originalText = btn.textContent;
+    btn.textContent = '获取中...';
+    btn.disabled = true;
 
     try {
-        const response = await fetch(`${API_BASE_URL}/api/config/save`, {
+        const response = await fetch('/api/knowledge/models/fetch', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                providers: appConfig.providers,
-                active_provider: appConfig.activeProvider
+                api_url: apiUrl || '',
+                api_key: apiKey,
+                models_url: modelsUrl || ''
             })
         });
         const data = await response.json();
-        if (!data.success) {
-            console.warn('保存到后端失败:', data.error);
+        if (data.success) {
+            await saveModelsToProvider(providerId, data.models);
+            loadModelSelectModels(providerId);
+            renderModelsTable(providerId);
+            // 通知聊天界面刷新
+            if (window.knowledgePage && typeof window.knowledgePage.loadModels === 'function') {
+                await window.knowledgePage.loadModels();
+            }
+            alert('成功获取并保存 ' + data.models.length + ' 个模型！');
+        } else {
+            alert('获取模型失败：' + (data.error || '未知错误'));
         }
     } catch (e) {
-        console.warn('保存到后端失败:', e);
+        alert('获取模型失败：' + e.message);
+    } finally {
+        btn.textContent = originalText;
+        btn.disabled = false;
+    }
+}
+
+async function saveModelsToProvider(providerId, models) {
+    if (!currentConfig.providers[providerId]) currentConfig.providers[providerId] = {};
+    currentConfig.providers[providerId].models = models;
+
+    try {
+        await fetch('/api/knowledge/models/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                provider_id: providerId,
+                models: models
+            })
+        });
+    } catch (e) {
+        console.error('保存模型失败', e);
+    }
+}
+
+async function saveModelsFromTable() {
+    const providerId = getCurrentEditingProviderId();
+    const tbody = document.getElementById('configModelsTbody');
+    if (!tbody) return;
+
+    const rows = tbody.querySelectorAll('tr');
+    const newModels = [];
+    const seenIds = new Set();
+    for (const tr of rows) {
+        const idInput = tr.querySelector('input[data-field="id"]');
+        const nameInput = tr.querySelector('input[data-field="name"]');
+        const id = (idInput?.value || '').trim();
+        const name = (nameInput?.value || '').trim();
+        if (!id) continue;
+        if (seenIds.has(id)) continue;
+        seenIds.add(id);
+        newModels.push({ id, name: name || id, created: 0, owned_by: '' });
     }
 
-    document.getElementById('modalSettings').classList.remove('show');
+    const btn = document.getElementById('saveModelsBtn');
+    const originalText = btn?.textContent;
+    if (btn) { btn.textContent = '保存中...'; btn.disabled = true; }
+
+    try {
+        const resp = await fetch('/api/knowledge/models/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ provider_id: providerId, models: newModels })
+        });
+        const data = await resp.json();
+        if (data.success) {
+            if (!currentConfig.providers[providerId]) currentConfig.providers[providerId] = {};
+            currentConfig.providers[providerId].models = newModels;
+            renderModelsTable(providerId);
+            loadModelSelectModels(providerId);
+            if (window.knowledgePage && typeof window.knowledgePage.loadModels === 'function') {
+                await window.knowledgePage.loadModels();
+            }
+            alert('模型列表已保存（' + newModels.length + ' 个）');
+        } else {
+            alert('保存失败：' + (data.error || '未知错误'));
+        }
+    } catch (e) {
+        alert('保存失败：' + e.message);
+    } finally {
+        if (btn) { btn.textContent = originalText || '保存模型列表'; btn.disabled = false; }
+    }
+}
+
+async function saveSettings() {
+    const activeTab = document.querySelector('.provider-tab.active');
+    const currentEditingProvider = activeTab ? activeTab.dataset.provider : (currentConfig.active_provider || 'open-ai');
+
+    const providers = JSON.parse(JSON.stringify(currentConfig.providers || {}));
+
+    // 从表单读取最新值（包括 models_url 和 default_model）
+    const finalModel = document.getElementById('configDefaultModel')?.value || '';
+    const modelsUrl = document.getElementById('configModelsUrl')?.value || '';
+
+    if (!providers[currentEditingProvider]) providers[currentEditingProvider] = {};
+    providers[currentEditingProvider] = {
+        ...providers[currentEditingProvider],
+        api_url: document.getElementById('configApiUrl')?.value || '',
+        api_key: document.getElementById('configApiKey')?.value || '',
+        models_url: modelsUrl,
+        default_model: finalModel
+    };
+
+    try {
+        const response = await fetch('/api/config/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                providers: providers,
+                active_provider: currentEditingProvider,
+                set_initialized: true
+            })
+        });
+        const data = await response.json();
+        if (data.success) {
+            currentConfig.active_provider = currentEditingProvider;
+            currentConfig.providers = providers;
+            currentConfig.initialized = true;
+            // 同步到 localStorage 的 appConfig
+            appConfig.activeProvider = currentEditingProvider;
+            if (providers[currentEditingProvider]) {
+                const p = providers[currentEditingProvider];
+                appConfig.providers[currentEditingProvider] = {
+                    ...(appConfig.providers[currentEditingProvider] || {}),
+                    name: p.name || appConfig.providers[currentEditingProvider]?.name || '',
+                    apiUrl: p.api_url || '',
+                    apiKey: p.api_key || '',
+                    defaultModel: p.default_model || ''
+                };
+                if (p.default_model) appConfig.currentModel = p.default_model;
+            }
+            saveAppConfig();
+            updateModelDisplay();
+            document.getElementById('modalSettings').classList.remove('show');
+            alert('保存成功！');
+        } else {
+            alert('保存失败：' + (data.error || '未知错误'));
+        }
+    } catch (e) {
+        alert('保存失败：' + e.message);
+    }
 }
 
 // ============================
@@ -2482,6 +2736,27 @@ function bindEvents() {
     if (saveSettingsBtn) {
         saveSettingsBtn.addEventListener('click', saveSettings);
     }
+    const toggleApiKeyBtn = document.getElementById('toggleApiKeyVisibility');
+    if (toggleApiKeyBtn) {
+        toggleApiKeyBtn.addEventListener('click', function() {
+            const input = document.getElementById('configApiKey');
+            if (input) {
+                input.type = input.type === 'password' ? 'text' : 'password';
+            }
+        });
+    }
+    const fetchModelsBtn = document.getElementById('fetchModelsBtn');
+    if (fetchModelsBtn) {
+        fetchModelsBtn.addEventListener('click', fetchModels);
+    }
+    const addModelBtn = document.getElementById('addModelBtn');
+    if (addModelBtn) {
+        addModelBtn.addEventListener('click', addModelRow);
+    }
+    const saveModelsBtn = document.getElementById('saveModelsBtn');
+    if (saveModelsBtn) {
+        saveModelsBtn.addEventListener('click', saveModelsFromTable);
+    }
 }
 
 // ============================
@@ -2492,9 +2767,13 @@ document.addEventListener('DOMContentLoaded', () => {
     bindEvents();
     bindChartControls();
     initGreeting();
-    loadStats();
-    loadDashboardCharts();
-    loadRecentActivity();
+    
+    // 并行加载所有数据
+    Promise.all([
+        loadStats(),
+        loadDashboardCharts(),
+        loadRecentActivity()
+    ]);
     
     // 加载侧边栏视频文件夹
     loadSidebarVideoFolders();
