@@ -1,12 +1,84 @@
 import os
 import subprocess
+import shutil
 from pathlib import Path
+from typing import Tuple, Optional, Dict, Any
 
 # 支持的视频格式
 SUPPORTED_VIDEO_EXTENSIONS = {".mp4", ".m4v", ".webm", ".mov", ".avi", ".wmv", ".flv", ".mkv"}
 
 
-def video_to_audio(video_path: str, output_audio_path: str = None) -> bool:
+def _find_ffmpeg() -> Optional[str]:
+    """查找并返回 ffmpeg 可执行文件的完整路径，找不到返回 None"""
+    # 优先从 PATH 中查找
+    ffmpeg_path = shutil.which("ffmpeg")
+    if ffmpeg_path:
+        return ffmpeg_path
+    
+    # 在 Python 的 Scripts 目录中查找
+    try:
+        from sys import prefix
+        candidate = Path(prefix) / "Scripts" / "ffmpeg.exe"
+        if candidate.exists():
+            return str(candidate)
+    except Exception:
+        pass
+    
+    return None
+
+
+def get_video_streams(video_path: str) -> Dict[str, Any]:
+    """
+    检查视频文件的流信息
+    
+    Returns:
+        包含 has_audio, has_video, duration, error 的字典
+    """
+    result = {
+        "has_audio": False,
+        "has_video": False,
+        "duration": 0.0,
+        "error": None
+    }
+    
+    try:
+        video_path = Path(video_path)
+        if not video_path.exists():
+            result["error"] = f"文件不存在: {video_path}"
+            return result
+        
+        ffmpeg_exe = _find_ffmpeg()
+        if not ffmpeg_exe:
+            result["error"] = "系统未安装 FFmpeg"
+            return result
+        
+        cmd = [ffmpeg_exe, "-i", str(video_path), "-hide_banner"]
+        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="ignore")
+        output = proc.stderr or proc.stdout
+        
+        # 解析流信息
+        for line in output.split("\n"):
+            if "Stream" in line:
+                if "Audio" in line:
+                    result["has_audio"] = True
+                if "Video" in line:
+                    result["has_video"] = True
+            elif "Duration:" in line:
+                try:
+                    duration_str = line.split("Duration: ")[1].split(",")[0].strip()
+                    h, m, s = duration_str.split(":")
+                    result["duration"] = float(h) * 3600 + float(m) * 60 + float(s)
+                except Exception:
+                    pass
+        
+        return result
+        
+    except Exception as e:
+        result["error"] = str(e)
+        return result
+
+
+def video_to_audio(video_path: str, output_audio_path: str = None) -> Tuple[bool, str]:
     """
     将视频转换为音频
     
@@ -15,49 +87,80 @@ def video_to_audio(video_path: str, output_audio_path: str = None) -> bool:
         output_audio_path: 输出音频路径，默认为同目录同名.mp3
     
     Returns:
-        是否转换成功
+        (是否成功, 错误信息) - 成功时错误信息为空字符串
     """
     try:
         video_path = Path(video_path)
         
         if not video_path.exists():
-            print(f"[Video Processor] 视频文件不存在: {video_path}")
-            return False
+            return False, f"视频文件不存在: {video_path}"
         
         if video_path.suffix.lower() not in SUPPORTED_VIDEO_EXTENSIONS:
-            print(f"[Video Processor] 不支持的视频格式: {video_path.suffix}")
-            return False
+            return False, f"不支持的视频格式: {video_path.suffix}"
+        
+        # 检查 ffmpeg 是否可用
+        ffmpeg_exe = _find_ffmpeg()
+        if not ffmpeg_exe:
+            return False, "系统未安装 FFmpeg，请先安装后再试"
         
         if output_audio_path is None:
             output_audio_path = str(video_path.with_suffix(".mp3"))
         
-        # 使用 ffmpeg 提取音频
+        output_path = Path(output_audio_path)
+        
+        # 如果 mp3 已存在且新于视频文件，跳过转换
+        if output_path.exists():
+            video_mtime = video_path.stat().st_mtime
+            audio_mtime = output_path.stat().st_mtime
+            if audio_mtime >= video_mtime:
+                print(f"[Video Processor] MP3 已存在且为最新，跳过转换: {output_audio_path}")
+                return True, ""
+        
+        # 先检查视频是否有音频流，提前发现问题
+        streams = get_video_streams(str(video_path))
+        if not streams["has_audio"]:
+            return False, f"视频文件没有音频流，无法提取音频（时长: {format_duration(streams['duration'])}）"
+        
+        # 确保输出目录存在
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # 使用 ffmpeg 提取音频（使用更可靠的参数）
         cmd = [
-            "ffmpeg",
+            ffmpeg_exe,
             "-i", str(video_path),
-            "-q:a", "0",
-            "-map", "a",
+            "-vn",
+            "-acodec", "libmp3lame",
+            "-q:a", "2",
             "-y",
             str(output_audio_path)
         ]
         
-        print(f"[Video Processor] 执行命令: {' '.join(cmd)}")
+        print(f"[Video Processor] 执行: {' '.join(cmd)}")
         
-        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="ignore")
         
         if result.returncode != 0:
-            print(f"[Video Processor] 音频提取失败: {result.stderr}")
-            return False
+            # 提取有用的错误信息
+            error_lines = [l.strip() for l in (result.stderr or "").split("\n") if l.strip()]
+            useful_error = "\n".join(error_lines[-5:]) if error_lines else "未知错误"
+            print(f"[Video Processor] FFmpeg 错误: {useful_error}")
+            return False, f"音频提取失败：{useful_error}"
         
-        print(f"[Video Processor] 音频提取成功: {output_audio_path}")
-        return True
+        # 验证输出文件
+        if not output_path.exists() or output_path.stat().st_size == 0:
+            return False, "音频输出文件不存在或为空"
+        
+        size_kb = output_path.stat().st_size / 1024
+        print(f"[Video Processor] 音频提取成功: {output_audio_path} ({size_kb:.1f} KB)")
+        return True, ""
         
     except Exception as e:
-        print(f"[Video Processor] 视频转音频失败: {e}")
-        return False
+        import traceback
+        traceback.print_exc()
+        return False, f"处理异常: {e}"
 
 
-def extract_thumbnail(video_path: str, output_path: str = None, time_offset: float = 1.0) -> bool:
+def extract_thumbnail(video_path: str, output_path: str = None, time_offset: float = 1.0) -> Tuple[bool, str]:
     """
     提取视频缩略图
     
@@ -67,25 +170,26 @@ def extract_thumbnail(video_path: str, output_path: str = None, time_offset: flo
         time_offset: 提取帧的时间偏移（秒）
     
     Returns:
-        是否提取成功
+        (是否成功, 错误信息)
     """
     try:
         video_path = Path(video_path)
         
         if not video_path.exists():
-            print(f"[Video Processor] 视频文件不存在: {video_path}")
-            return False
+            return False, f"视频文件不存在: {video_path}"
+        
+        ffmpeg_exe = _find_ffmpeg()
+        if not ffmpeg_exe:
+            return False, "系统未安装 FFmpeg"
         
         if video_path.suffix.lower() not in SUPPORTED_VIDEO_EXTENSIONS:
-            print(f"[Video Processor] 不支持的视频格式: {video_path.suffix}")
-            return False
+            return False, f"不支持的视频格式: {video_path.suffix}"
         
         if output_path is None:
             output_path = str(video_path.with_suffix(".jpg"))
         
-        # 使用 ffmpeg 提取缩略图
         cmd = [
-            "ffmpeg",
+            ffmpeg_exe,
             "-i", str(video_path),
             "-ss", str(time_offset),
             "-vframes", "1",
@@ -94,20 +198,22 @@ def extract_thumbnail(video_path: str, output_path: str = None, time_offset: flo
             str(output_path)
         ]
         
-        print(f"[Video Processor] 执行命令: {' '.join(cmd)}")
+        print(f"[Video Processor] 执行: {' '.join(cmd)}")
         
-        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="ignore")
         
         if result.returncode != 0:
-            print(f"[Video Processor] 缩略图提取失败: {result.stderr}")
-            return False
+            return False, f"缩略图提取失败"
+        
+        if not Path(output_path).exists():
+            return False, "缩略图文件未生成"
         
         print(f"[Video Processor] 缩略图提取成功: {output_path}")
-        return True
+        return True, ""
         
     except Exception as e:
         print(f"[Video Processor] 提取缩略图失败: {e}")
-        return False
+        return False, str(e)
 
 
 def get_video_duration(video_path: str) -> float:
@@ -120,34 +226,8 @@ def get_video_duration(video_path: str) -> float:
     Returns:
         视频时长（秒），失败返回 0
     """
-    try:
-        video_path = Path(video_path)
-        
-        if not video_path.exists():
-            return 0.0
-        
-        cmd = [
-            "ffmpeg",
-            "-i", str(video_path),
-            "-f", "null",
-            "-"
-        ]
-        
-        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore')
-        
-        # 从输出中提取时长信息（FFmpeg通常输出到stderr）
-        output = result.stderr or result.stdout
-        for line in output.split('\n'):
-            if "Duration:" in line:
-                duration_str = line.split("Duration: ")[1].split(",")[0].strip()
-                h, m, s = duration_str.split(":")
-                return float(h) * 3600 + float(m) * 60 + float(s)
-        
-        return 0.0
-        
-    except Exception as e:
-        print(f"[Video Processor] 获取视频时长失败: {e}")
-        return 0.0
+    streams = get_video_streams(video_path)
+    return streams["duration"]
 
 
 def format_duration(seconds: float) -> str:
@@ -160,6 +240,9 @@ def format_duration(seconds: float) -> str:
     Returns:
         格式化的时长字符串（如 01:23:45）
     """
+    if seconds <= 0:
+        return "00:00"
+    
     hours = int(seconds // 3600)
     minutes = int((seconds % 3600) // 60)
     secs = int(seconds % 60)

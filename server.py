@@ -136,11 +136,19 @@ def process_batch_transcribe_task(task_id: str, video_paths: List[str]):
                 })
                 continue
             
-            # 视频转音频
-            audio_path = str(full_path).replace(".mp4", ".mp3")
-            video_to_audio(str(full_path), audio_path)
+            # 1. 视频转音频
+            audio_path = str(full_path.with_suffix(".mp3"))
+            convert_success, error_msg = video_to_audio(str(full_path), audio_path)
             
-            # 语音转文字
+            if not convert_success:
+                results.append({
+                    "path": video_path,
+                    "success": False,
+                    "error": error_msg or "视频转音频失败"
+                })
+                continue
+            
+            # 2. 语音转文字
             result = transcribe_audio(audio_path, language="auto")
             
             if result["success"]:
@@ -619,14 +627,25 @@ def process_video_transcribe_task(task_id: str, video_path: str):
     try:
         update_task(task_id, status=TASK_STATUS_RUNNING, progress=5, message="正在转换视频到音频...")
         
-        audio_path = video_path.replace(".mp4", ".mp3")
-        video_to_audio(video_path, audio_path)
+        # 1. 视频转 MP3 - 必须成功才能继续
+        video_file = Path(video_path)
+        audio_path = str(video_file.with_suffix(".mp3"))
+        
+        convert_success, error_msg = video_to_audio(video_path, audio_path)
+        
+        if not convert_success:
+            update_task(
+                task_id, 
+                status=TASK_STATUS_FAILED, 
+                progress=0, 
+                message=error_msg or "视频转音频失败"
+            )
+            return
         
         update_task(task_id, status=TASK_STATUS_RUNNING, progress=20, message="音频转换完成，开始语音识别...")
         
-        # 进度回调函数
+        # 2. 语音识别 - 带进度回调
         def progress_callback(phase, progress, message):
-            # 阶段映射到进度范围
             phase_ranges = {
                 "loading": (20, 25),
                 "segmenting": (25, 30),
