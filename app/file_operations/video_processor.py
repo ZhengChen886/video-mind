@@ -7,6 +7,9 @@ from typing import Tuple, Optional, Dict, Any
 # 支持的视频格式
 SUPPORTED_VIDEO_EXTENSIONS = {".mp4", ".m4v", ".webm", ".mov", ".avi", ".wmv", ".flv", ".mkv"}
 
+# 支持的音频格式
+SUPPORTED_AUDIO_EXTENSIONS = {".mp3", ".m4a", ".wav", ".flac", ".ogg", ".aac"}
+
 
 def _find_ffmpeg() -> Optional[str]:
     """查找并返回 ffmpeg 可执行文件的完整路径，找不到返回 None"""
@@ -80,22 +83,57 @@ def get_video_streams(video_path: str) -> Dict[str, Any]:
 
 def video_to_audio(video_path: str, output_audio_path: str = None) -> Tuple[bool, str]:
     """
-    将视频转换为音频
-    
+    将视频转换为音频（支持音频旁路：mp3 直接返回，其他音频转 mp3）
+
     Args:
-        video_path: 视频文件路径
+        video_path: 视频/音频文件路径
         output_audio_path: 输出音频路径，默认为同目录同名.mp3
-    
+
     Returns:
         (是否成功, 错误信息) - 成功时错误信息为空字符串
     """
     try:
         video_path = Path(video_path)
-        
+
         if not video_path.exists():
-            return False, f"视频文件不存在: {video_path}"
-        
-        if video_path.suffix.lower() not in SUPPORTED_VIDEO_EXTENSIONS:
+            return False, f"文件不存在: {video_path}"
+
+        suffix_lower = video_path.suffix.lower()
+
+        # 音频旁路处理
+        if suffix_lower in SUPPORTED_AUDIO_EXTENSIONS:
+            # 已经是 .mp3：直接返回成功
+            if suffix_lower == ".mp3":
+                return True, ""
+            # 其他音频格式：转 mp3
+            ffmpeg_exe = _find_ffmpeg()
+            if not ffmpeg_exe:
+                return False, "系统未安装 FFmpeg，请先安装后再试"
+            if output_audio_path is None:
+                output_audio_path = str(video_path.with_suffix(".mp3"))
+            output_path = Path(output_audio_path)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            cmd = [
+                ffmpeg_exe,
+                "-i", str(video_path),
+                "-vn",
+                "-acodec", "libmp3lame",
+                "-q:a", "2",
+                "-y",
+                str(output_audio_path)
+            ]
+            print(f"[Video Processor] 音频转 MP3: {' '.join(cmd)}")
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="ignore")
+            if result.returncode != 0:
+                error_lines = [l.strip() for l in (result.stderr or "").split("\n") if l.strip()]
+                useful_error = "\n".join(error_lines[-5:]) if error_lines else "未知错误"
+                return False, f"音频转换失败：{useful_error}"
+            if not output_path.exists() or output_path.stat().st_size == 0:
+                return False, "音频输出文件不存在或为空"
+            return True, ""
+
+        # 视频格式校验
+        if suffix_lower not in SUPPORTED_VIDEO_EXTENSIONS:
             return False, f"不支持的视频格式: {video_path.suffix}"
         
         # 检查 ffmpeg 是否可用
@@ -162,26 +200,30 @@ def video_to_audio(video_path: str, output_audio_path: str = None) -> Tuple[bool
 
 def extract_thumbnail(video_path: str, output_path: str = None, time_offset: float = 1.0) -> Tuple[bool, str]:
     """
-    提取视频缩略图
-    
+    提取视频缩略图（音频文件直接返回 False）
+
     Args:
         video_path: 视频文件路径
         output_path: 输出缩略图路径，默认为同目录同名.jpg
         time_offset: 提取帧的时间偏移（秒）
-    
+
     Returns:
         (是否成功, 错误信息)
     """
     try:
         video_path = Path(video_path)
-        
+
         if not video_path.exists():
             return False, f"视频文件不存在: {video_path}"
-        
+
+        # 音频文件无缩略图
+        if video_path.suffix.lower() in SUPPORTED_AUDIO_EXTENSIONS:
+            return False, "音频文件无缩略图"
+
         ffmpeg_exe = _find_ffmpeg()
         if not ffmpeg_exe:
             return False, "系统未安装 FFmpeg"
-        
+
         if video_path.suffix.lower() not in SUPPORTED_VIDEO_EXTENSIONS:
             return False, f"不支持的视频格式: {video_path.suffix}"
         

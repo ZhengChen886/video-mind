@@ -3,78 +3,134 @@ import shutil
 import subprocess
 import uuid
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from .video_processor import get_video_duration
-from config.paths import VIDEO_DIR
+from config.paths import VIDEO_DIR, AUDIO_DIR
 
 # 支持的视频格式
 SUPPORTED_VIDEO_EXTENSIONS = {".mp4", ".m4v", ".webm", ".mov", ".avi", ".wmv", ".flv", ".mkv"}
+
+# 支持的音频格式
+SUPPORTED_AUDIO_EXTENSIONS = {".mp3", ".m4a", ".wav", ".flac", ".ogg", ".aac"}
+
+# 媒体文件（视频+音频）
+MEDIA_EXTENSIONS = SUPPORTED_VIDEO_EXTENSIONS | SUPPORTED_AUDIO_EXTENSIONS
 
 # 支持的文档格式
 SUPPORTED_DOCUMENT_EXTENSIONS = {".md", ".pdf", ".doc", ".docx", ".txt", ".xls", ".xlsx", ".ppt", ".pptx", ".rtf", ".odt"}
 
 
+def is_audio_file(path) -> bool:
+    """判断是否为音频文件"""
+    if path is None:
+        return False
+    if hasattr(path, "suffix"):
+        return path.suffix.lower() in SUPPORTED_AUDIO_EXTENSIONS
+    return Path(str(path)).suffix.lower() in SUPPORTED_AUDIO_EXTENSIONS
+
+
+def is_video_file(path) -> bool:
+    """判断是否为视频文件"""
+    if path is None:
+        return False
+    if hasattr(path, "suffix"):
+        return path.suffix.lower() in SUPPORTED_VIDEO_EXTENSIONS
+    return Path(str(path)).suffix.lower() in SUPPORTED_VIDEO_EXTENSIONS
+
+
+def get_base_dir(media_type: str = "video") -> Path:
+    """
+    根据 media_type 返回对应的根目录
+    Args:
+        media_type: 'video' -> VIDEO_DIR (data/mp4)
+                    'audio' -> AUDIO_DIR (data/mp3)
+    """
+    if media_type == "audio":
+        return AUDIO_DIR
+    return VIDEO_DIR
+
+
 def init_video_dir():
     """初始化视频存储目录，创建默认子目录"""
     default_dirs = ["未分类", "学习资料", "会议记录", "个人收藏"]
-    
+
     VIDEO_DIR.mkdir(parents=True, exist_ok=True)
-    
+
     for dir_name in default_dirs:
         (VIDEO_DIR / dir_name).mkdir(exist_ok=True)
 
 
-def get_directory_list(path: str = "") -> List[Dict[str, Any]]:
+def init_audio_dir():
+    """初始化音频存储目录，创建默认子目录（不存在则新建）"""
+    default_dirs = ["未分类", "学习资料", "会议记录", "个人收藏"]
+
+    AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+
+    for dir_name in default_dirs:
+        (AUDIO_DIR / dir_name).mkdir(exist_ok=True)
+
+
+def init_media_dirs():
+    """初始化视频和音频存储目录"""
+    init_video_dir()
+    init_audio_dir()
+
+
+def get_directory_list(path: str = "", media_type: str = "video") -> List[Dict[str, Any]]:
     """
     获取指定目录下的文件和子目录列表
-    
+
     Args:
-        path: 相对路径，默认为根目录（mp4/）
-    
-    Returns:
-        目录和文件列表
+        path: 相对路径，默认为根目录
+        media_type: 媒体类型 'video' (data/mp4) 或 'audio' (data/mp3)
+                    不同 media_type 走不同的根目录，且只返回对应类型的文件
     """
-    full_path = VIDEO_DIR / path
+    base_dir = get_base_dir(media_type)
+    target_exts = SUPPORTED_AUDIO_EXTENSIONS if media_type == "audio" else SUPPORTED_VIDEO_EXTENSIONS
+    media_label = "audio" if media_type == "audio" else "video"
+
+    full_path = base_dir / path
     items = []
-    
+
     if not full_path.exists() or not full_path.is_dir():
         return items
-    
+
     for item in sorted(full_path.iterdir()):
         if item.is_dir():
             items.append({
                 "name": item.name,
-                "path": str(item.relative_to(VIDEO_DIR)),
+                "path": str(item.relative_to(base_dir)),
                 "type": "directory",
                 "size": 0,
                 "modified": item.stat().st_mtime
             })
-        elif item.is_file() and item.suffix.lower() in SUPPORTED_VIDEO_EXTENSIONS:
+        elif item.is_file() and item.suffix.lower() in target_exts:
+            ext = item.suffix.lower()
             items.append({
                 "name": item.name,
-                "path": str(item.relative_to(VIDEO_DIR)),
+                "path": str(item.relative_to(base_dir)),
                 "type": "file",
                 "size": item.stat().st_size,
                 "modified": item.stat().st_mtime,
-                "extension": item.suffix.lower()
+                "extension": ext,
+                "media_type": media_label
             })
-    
+
     return items
 
 
-def create_directory(path: str, name: str) -> bool:
+def create_directory(path: str, name: str, media_type: str = "video") -> bool:
     """
     在指定路径下创建新目录
-    
+
     Args:
         path: 父目录相对路径
         name: 新目录名称
-    
-    Returns:
-        是否创建成功
+        media_type: 媒体类型，决定根目录
     """
     try:
-        new_dir = VIDEO_DIR / path / name
+        base_dir = get_base_dir(media_type)
+        new_dir = base_dir / path / name
         if new_dir.exists():
             return False
         new_dir.mkdir(parents=True)
@@ -83,27 +139,32 @@ def create_directory(path: str, name: str) -> bool:
         return False
 
 
-def delete_item(path: str) -> bool:
+def delete_item(path: str, media_type: str = "video") -> Dict[str, Any]:
     """
-    删除文件或目录
+    删除文件或目录（目录会递归删除其中所有内容）
 
     Args:
         path: 要删除的文件或目录的相对路径
+        media_type: 媒体类型，决定根目录
 
     Returns:
-        是否删除成功
+        包含 success / error / deleted_files / deleted_type 的字典
     """
     try:
-        full_path = VIDEO_DIR / path
+        base_dir = get_base_dir(media_type)
+        full_path = base_dir / path
         if full_path.is_dir():
+            # 先递归统计目录内文件数（不含目录本身），用于前端展示
+            file_count = sum(1 for p in full_path.rglob("*") if p.is_file())
             shutil.rmtree(full_path)
+            return {"success": True, "deleted_files": file_count, "deleted_type": "directory"}
         elif full_path.is_file():
             os.remove(full_path)
+            return {"success": True, "deleted_files": 1, "deleted_type": "file"}
         else:
-            return False
-        return True
-    except Exception:
-        return False
+            return {"success": False, "error": "路径不存在", "deleted_files": 0}
+    except Exception as e:
+        return {"success": False, "error": str(e), "deleted_files": 0}
 
 
 def find_related_files(video_path: Path) -> List[Path]:
@@ -139,26 +200,28 @@ def find_related_files(video_path: Path) -> List[Path]:
     return related_files
 
 
-def move_item(source_path: str, target_dir: str) -> Dict[str, Any]:
+def move_item(source_path: str, target_dir: str, media_type: str = "video") -> Dict[str, Any]:
     """
     移动文件或目录到目标目录，同时处理视频相关文件
 
     Args:
         source_path: 源文件或目录的相对路径
         target_dir: 目标目录的相对路径
+        media_type: 媒体类型，决定根目录
 
     Returns:
         包含成功状态和错误信息的字典
     """
     try:
-        source_full = VIDEO_DIR / source_path
-        target_full = VIDEO_DIR / target_dir
+        base_dir = get_base_dir(media_type)
+        source_full = base_dir / source_path
+        target_full = base_dir / target_dir
 
         if not source_full.exists():
             return {"success": False, "error": "源文件或目录不存在"}
 
         target_full.mkdir(parents=True, exist_ok=True)
-        
+
         # 如果是文件且是视频文件，查找相关文件
         files_to_move = [source_full]
         if source_full.is_file() and source_full.suffix.lower() in SUPPORTED_VIDEO_EXTENSIONS:
@@ -169,7 +232,7 @@ def move_item(source_path: str, target_dir: str) -> Dict[str, Any]:
         moved_files = []
         for file_path in files_to_move:
             target_path = target_full / file_path.name
-            
+
             # 处理重名情况
             if target_path.exists():
                 counter = 1
@@ -188,19 +251,21 @@ def move_item(source_path: str, target_dir: str) -> Dict[str, Any]:
         return {"success": False, "error": f"移动失败: {str(e)}"}
 
 
-def rename_item(path: str, new_name: str) -> Dict[str, Any]:
+def rename_item(path: str, new_name: str, media_type: str = "video") -> Dict[str, Any]:
     """
     重命名文件或目录，同时处理视频相关文件
 
     Args:
         path: 要重命名的文件或目录的相对路径
         new_name: 新名称
+        media_type: 媒体类型，决定根目录
 
     Returns:
         包含成功状态和错误信息的字典
     """
     try:
-        full_path = VIDEO_DIR / path
+        base_dir = get_base_dir(media_type)
+        full_path = base_dir / path
         if not full_path.exists():
             return {"success": False, "error": "文件或目录不存在"}
 
@@ -210,7 +275,7 @@ def rename_item(path: str, new_name: str) -> Dict[str, Any]:
 
         parent_dir = full_path.parent
         new_base = Path(new_name).stem  # 去除扩展名的新名称
-        
+
         # 如果是目录，直接重命名
         if full_path.is_dir():
             new_path = parent_dir / new_name
@@ -244,7 +309,7 @@ def rename_item(path: str, new_name: str) -> Dict[str, Any]:
                     continue  # 不匹配的文件跳过
 
             new_file_path = parent_dir / new_filename
-            
+
             if new_file_path.exists():
                 return {"success": False, "error": f"已存在同名文件: {new_filename}"}
 
@@ -256,53 +321,58 @@ def rename_item(path: str, new_name: str) -> Dict[str, Any]:
         return {"success": False, "error": f"重命名失败: {str(e)}"}
 
 
-def save_uploaded_file(file, target_dir: str = "") -> Path:
+def save_uploaded_file(file, target_dir: str = "", media_type: str = "video") -> Path:
     """
     保存上传的文件到指定目录
-    
+
     Args:
         file: 上传的文件对象
         target_dir: 目标目录相对路径
-    
+        media_type: 媒体类型，决定根目录（'video' -> data/mp4, 'audio' -> data/mp3）
+
     Returns:
         保存后的文件路径
     """
-    target_path = VIDEO_DIR / target_dir
+    base_dir = get_base_dir(media_type)
+    target_path = base_dir / target_dir
     target_path.mkdir(parents=True, exist_ok=True)
-    
+
     file_path = target_path / file.filename
     with open(file_path, "wb") as f:
         f.write(file.file.read())
-    
+
     return file_path
 
 
-def get_file_path(relative_path: str) -> Path:
+def get_file_path(relative_path: str, media_type: str = "video") -> Path:
     """
     获取文件的完整路径
-    
+
     Args:
         relative_path: 文件相对路径
-    
+        media_type: 媒体类型，决定根目录
+
     Returns:
         文件完整路径
     """
-    return VIDEO_DIR / relative_path
+    return get_base_dir(media_type) / relative_path
 
 
-def get_files_by_extensions(extensions: set) -> List[Dict[str, Any]]:
+def get_files_by_extensions(extensions: set, media_type: str = "video") -> List[Dict[str, Any]]:
     """
     通用函数：递归获取指定扩展名的所有文件
-    
+
     Args:
         extensions: 文件扩展名集合（小写，如 {".md", ".pdf"}）
-    
+        media_type: 媒体类型，决定根目录
+
     Returns:
         符合条件的文件列表
     """
     result = []
-    
-    for root, dirs, files in os.walk(VIDEO_DIR):
+    base_dir = get_base_dir(media_type)
+
+    for root, dirs, files in os.walk(base_dir):
         for file in files:
             ext = Path(file).suffix.lower()
             if ext in extensions:
@@ -310,25 +380,30 @@ def get_files_by_extensions(extensions: set) -> List[Dict[str, Any]]:
                 stat_result = full_path.stat()
                 result.append({
                     "name": file,
-                    "path": str(full_path.relative_to(VIDEO_DIR)),
-                    "directory": str(Path(root).relative_to(VIDEO_DIR)),
+                    "path": str(full_path.relative_to(base_dir)),
+                    "directory": str(Path(root).relative_to(base_dir)),
                     "size": stat_result.st_size,
                     "modified": stat_result.st_mtime,
                     "extension": ext
                 })
-    
+
     return result
 
 
 def get_video_files() -> List[Dict[str, Any]]:
     """获取所有视频文件"""
-    return get_files_by_extensions(SUPPORTED_VIDEO_EXTENSIONS)
+    return get_files_by_extensions(SUPPORTED_VIDEO_EXTENSIONS, media_type="video")
+
+
+def get_audio_files() -> List[Dict[str, Any]]:
+    """获取所有音频文件"""
+    return get_files_by_extensions(SUPPORTED_AUDIO_EXTENSIONS, media_type="audio")
 
 
 def get_document_files(type: str = None) -> List[Dict[str, Any]]:
     """
     获取文档文件，支持类型过滤
-    
+
     Args:
         type: 文档类型过滤，可选值：
             - None 或 'all': 返回全部 .md 文件
@@ -336,17 +411,17 @@ def get_document_files(type: str = None) -> List[Dict[str, Any]]:
             - 'summary': 返回总结 (_summary.md)
             - 'outline': 返回大纲 (_outline.md)
             - 'notes': 返回笔记 (_notes.md)
-    
+
     Returns:
         符合条件的文件列表
     """
     # 只返回 .md 格式文件
     md_extensions = {".md"}
-    all_docs = get_files_by_extensions(md_extensions)
-    
+    all_docs = get_files_by_extensions(md_extensions, media_type="video")
+
     if not type or type == 'all':
         return all_docs
-    
+
     # 根据类型过滤
     type_suffixes = {
         'subtitle': ['_subtitle.md'],
@@ -354,37 +429,48 @@ def get_document_files(type: str = None) -> List[Dict[str, Any]]:
         'outline': ['_outline.md'],
         'notes': ['_notes.md']
     }
-    
+
     if type not in type_suffixes:
         return all_docs
-    
+
     suffixes = type_suffixes[type]
     return [doc for doc in all_docs if any(doc['name'].endswith(suffix) for suffix in suffixes)]
 
 
 # 初始化默认目录
 init_video_dir()
+init_audio_dir()
 
 
-def save_url_file(url: str, target_dir: str = "", filename: str = "") -> Dict[str, Any]:
+def save_url_file(url: str, target_dir: str = "", filename: str = "", media_type: str = "video") -> Dict[str, Any]:
     """
-    从URL下载视频文件
+    从URL下载媒体文件
 
     Args:
-        url: 视频文件URL
+        url: 媒体文件URL
         target_dir: 目标目录相对路径
         filename: 自定义文件名（可选，不填则从URL自动提取）
+        media_type: 媒体类型，决定根目录
 
     Returns:
         包含下载结果的字典，包含 success, file_path, filename, error 等字段
     """
-    target_path = VIDEO_DIR / target_dir
+    base_dir = get_base_dir(media_type)
+    target_path = base_dir / target_dir
     target_path.mkdir(parents=True, exist_ok=True)
+
+    # 根据 media_type 决定允许的扩展名
+    if media_type == "audio":
+        allowed_exts = ["mp3", "m4a", "wav", "flac", "ogg", "aac"]
+        default_ext = "mp3"
+    else:
+        allowed_exts = ["mp4", "m4s", "webm", "mov", "avi", "mkv"]
+        default_ext = "mp4"
 
     if filename:
         ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-        if ext not in ["mp4", "m4s", "webm", "mov", "avi", "mkv"]:
-            ext = "mp4"
+        if ext not in allowed_exts:
+            ext = default_ext
         name_part = filename.rsplit(".", 1)[0] if "." in filename else filename
         name_part = "".join(c if c.isalnum() or c in "._-" else "_" for c in name_part)
         filename = f"{name_part}.{ext}"
@@ -395,11 +481,11 @@ def save_url_file(url: str, target_dir: str = "", filename: str = "") -> Dict[st
                 break
 
         if not filename:
-            filename = f"{uuid.uuid4().hex}.mp4"
+            filename = f"{uuid.uuid4().hex}.{default_ext}"
         else:
             ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-            if ext not in ["mp4", "m4s", "webm", "mov", "avi", "mkv"]:
-                ext = "mp4"
+            if ext not in allowed_exts:
+                ext = default_ext
             name_part = filename.rsplit(".", 1)[0] if "." in filename else filename
             name_part = "".join(c if c.isalnum() or c in "._-" else "_" for c in name_part)
             filename = f"{name_part}.{ext}"
@@ -416,7 +502,7 @@ def save_url_file(url: str, target_dir: str = "", filename: str = "") -> Dict[st
             str(output_path)
         ]
 
-        print(f"[File Manager] 下载视频: {' '.join(cmd[:6])}...")
+        print(f"[File Manager] 下载媒体({media_type}): {' '.join(cmd[:6])}...")
 
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
 
@@ -433,17 +519,17 @@ def save_url_file(url: str, target_dir: str = "", filename: str = "") -> Dict[st
                 "error": "下载后文件不存在"
             }
 
-        # 获取视频时长
+        # 获取时长
         try:
             duration = get_video_duration(str(output_path))
         except Exception as e:
-            print(f"[File Manager] 获取视频时长失败: {e}")
+            print(f"[File Manager] 获取时长失败: {e}")
             duration = 0
 
         return {
             "success": True,
             "file_path": output_path,
-            "saved_path": str(output_path.relative_to(VIDEO_DIR)),
+            "saved_path": str(output_path.relative_to(base_dir)),
             "filename": filename,
             "size": output_path.stat().st_size,
             "duration": duration

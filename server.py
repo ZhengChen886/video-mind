@@ -27,7 +27,10 @@ from app.file_operations.file_manager import (
     get_video_files,
     get_document_files,
     save_url_file,
-    VIDEO_DIR
+    is_audio_file,
+    VIDEO_DIR,
+    AUDIO_DIR,
+    get_base_dir,
 )
 from app.file_operations.video_processor import (
     video_to_audio,
@@ -350,13 +353,22 @@ async def home(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 # ============================================================
-# 全部视频列表
+# 全部视频/音频列表
 @app.get("/api/files", response_class=JSONResponse)
-async def list_files(path: str = ""):
-    items = get_directory_list(path)
+async def list_files(path: str = "", media_type: str = "video"):
+    """
+    获取文件列表
+    Query Parameters:
+        - path: 相对路径
+        - media_type: 'video' (data/mp4，仅视频) 或 'audio' (data/mp3，仅音频)
+    """
+    if media_type not in ("video", "audio"):
+        media_type = "video"
+    items = get_directory_list(path, media_type=media_type)
     return {
         "success": True,
         "path": path,
+        "media_type": media_type,
         "items": items
     }
 
@@ -385,7 +397,7 @@ async def list_documents(type: str = None):
 
 @app.post("/api/folders", response_class=JSONResponse)
 @app.post("/api/directory", response_class=JSONResponse)
-async def create_new_directory(request: Request = None, path: str = "", name: str = ""):
+async def create_new_directory(request: Request = None, path: str = "", name: str = "", media_type: str = "video"):
     # 兼容两种调用方式
     if request:
         try:
@@ -394,12 +406,16 @@ async def create_new_directory(request: Request = None, path: str = "", name: st
                 path = body.get("path", "")
             if "name" in body:
                 name = body.get("name", "")
+            if "media_type" in body:
+                media_type = body.get("media_type", "video")
         except Exception:
             pass
     if not name.strip():
         raise HTTPException(status_code=400, detail="目录名称不能为空")
-    
-    success = create_directory(path, name)
+
+    if media_type not in ("video", "audio"):
+        media_type = "video"
+    success = create_directory(path, name, media_type=media_type)
     if success:
         return {
             "success": True,
@@ -420,26 +436,69 @@ async def delete_item_api(request: Request):
     try:
         body = await request.json()
         path = body.get("path", "") or body.get("source_path", "")
+        media_type = body.get("media_type", "video")
     except Exception:
         path = ""
-    
+        media_type = "video"
+
     if not path:
         raise HTTPException(status_code=400, detail="路径不能为空")
-    
-    success = delete_item(path)
-    if success:
+
+    if media_type not in ("video", "audio"):
+        media_type = "video"
+    result = delete_item(path, media_type=media_type)
+    if result.get("success"):
         return {
             "success": True,
-            "message": "删除成功"
+            "message": "删除成功",
+            "deleted_files": result.get("deleted_files", 0),
+            "deleted_type": result.get("deleted_type", "file")
         }
     else:
         return JSONResponse(
             status_code=400,
             content={
                 "success": False,
-                "error": "删除失败"
+                "error": result.get("error", "删除失败")
             }
         )
+
+
+@app.get("/api/item/count", response_class=JSONResponse)
+async def count_item_contents(path: str = "", media_type: str = "video"):
+    """
+    统计指定路径下递归的文件数量与类型（用于删除前预览）。
+    path 为空或指向文件时，返回 type=file、count=1。
+    path 指向目录时，返回 type=directory 与递归文件总数。
+    """
+    if media_type not in ("video", "audio"):
+        media_type = "video"
+
+    base_dir = get_base_dir(media_type)
+    full_path = base_dir / path if path else base_dir
+
+    if not full_path.exists():
+        return JSONResponse(
+            status_code=404,
+            content={"success": False, "error": "路径不存在", "count": 0, "type": "unknown", "name": ""}
+        )
+
+    if full_path.is_file():
+        return {
+            "success": True,
+            "type": "file",
+            "count": 1,
+            "name": full_path.name
+        }
+
+    # 目录：递归统计文件数
+    file_count = sum(1 for p in full_path.rglob("*") if p.is_file())
+    return {
+        "success": True,
+        "type": "directory",
+        "count": file_count,
+        "name": full_path.name
+    }
 
 
 @app.post("/api/item/move", response_class=JSONResponse)
@@ -448,14 +507,18 @@ async def move_item_api(request: Request):
         body = await request.json()
         source_path = body.get("source_path", "")
         target_dir = body.get("target_dir", "")
+        media_type = body.get("media_type", "video")
     except Exception:
         source_path = ""
         target_dir = ""
+        media_type = "video"
 
     if not source_path:
         raise HTTPException(status_code=400, detail="源路径不能为空")
 
-    result = move_item(source_path, target_dir)
+    if media_type not in ("video", "audio"):
+        media_type = "video"
+    result = move_item(source_path, target_dir, media_type=media_type)
     if result["success"]:
         return {
             "success": True,
@@ -477,17 +540,21 @@ async def rename_item_api(request: Request):
         body = await request.json()
         path = body.get("path", "") or body.get("source_path", "")
         new_name = body.get("new_name", "")
+        media_type = body.get("media_type", "video")
     except Exception:
         path = ""
         new_name = ""
+        media_type = "video"
 
     if not path:
         raise HTTPException(status_code=400, detail="路径不能为空")
-    
+
     if not new_name:
         raise HTTPException(status_code=400, detail="新名称不能为空")
 
-    result = rename_item(path, new_name)
+    if media_type not in ("video", "audio"):
+        media_type = "video"
+    result = rename_item(path, new_name, media_type=media_type)
     if result["success"]:
         return {
             "success": True,
@@ -505,20 +572,27 @@ async def rename_item_api(request: Request):
 
 @app.post("/api/upload", response_class=JSONResponse)
 @app.post("/api/video/upload", response_class=JSONResponse)
-async def upload_video(file: UploadFile = File(...), path: str = ""):
+async def upload_video(file: UploadFile = File(...), path: str = "", media_type: str = "video"):
     if not file.filename:
         raise HTTPException(status_code=400, detail="未提供文件名")
-    
+
+    if media_type not in ("video", "audio"):
+        media_type = "video"
+
     try:
-        filename = await save_video_file(file, target_dir=path)
-        
-        video_path = str(VIDEO_DIR / filename)
-        thumbnail_path = video_path.replace(".mp4", ".jpg")
-        extract_thumbnail(video_path, thumbnail_path)
-        
+        filename = await save_video_file(file, target_dir=path, media_type=media_type)
+
+        base_dir = get_base_dir(media_type)
+        full_path = str(base_dir / filename)
+        if media_type == "video":
+            # 视频提取缩略图
+            thumbnail_path = full_path.replace(".mp4", ".jpg")
+            extract_thumbnail(full_path, thumbnail_path)
+
         return {
             "success": True,
             "filename": filename,
+            "media_type": media_type,
             "message": "上传成功"
         }
     except Exception as e:
@@ -533,23 +607,29 @@ async def upload_video_by_url(request: Request):
         url = body.get("url", "")
         target_dir = body.get("target_dir", "")
         filename = body.get("filename", "")
+        media_type = body.get("media_type", "video")
     except Exception:
         raise HTTPException(status_code=400, detail="请求参数解析失败")
-    
+
     if not url:
         raise HTTPException(status_code=400, detail="URL不能为空")
-    
-    result = save_url_file(url, target_dir, filename)
-    
+
+    if media_type not in ("video", "audio"):
+        media_type = "video"
+
+    result = save_url_file(url, target_dir, filename, media_type=media_type)
+
     if result["success"]:
-        video_path = str(result["file_path"])
-        thumbnail_path = video_path.replace(".mp4", ".jpg")
-        extract_thumbnail(video_path, thumbnail_path)
-        
+        full_path = str(result["file_path"])
+        if media_type == "video":
+            thumbnail_path = full_path.replace(".mp4", ".jpg")
+            extract_thumbnail(full_path, thumbnail_path)
+
         return {
             "success": True,
             "filename": result["filename"],
             "saved_path": result["saved_path"],
+            "media_type": media_type,
             "duration": result.get("duration", 0),
             "size": result.get("size", 0),
             "message": "下载成功"
@@ -565,12 +645,14 @@ async def upload_video_by_url(request: Request):
 
 
 @app.get("/api/video/{path:path}", response_class=FileResponse)
-async def get_video(path: str, thumbnail: bool = False):
-    print(f"[Server] 请求视频文件: path={path}, thumbnail={thumbnail}")
-    file_path = get_file_path(path)
+async def get_video(path: str, thumbnail: bool = False, media_type: str = "video"):
+    print(f"[Server] 请求媒体文件: path={path}, thumbnail={thumbnail}, media_type={media_type}")
+    if media_type not in ("video", "audio"):
+        media_type = "video"
+    file_path = get_file_path(path, media_type=media_type)
     print(f"[Server] 完整文件路径: {file_path}")
     print(f"[Server] 文件是否存在: {file_path.exists()}")
-    
+
     # 如果请求缩略图，返回对应的jpg文件
     if thumbnail:
         thumbnail_path = file_path.parent / f"{file_path.stem}.jpg"
@@ -579,12 +661,30 @@ async def get_video(path: str, thumbnail: bool = False):
             return FileResponse(thumbnail_path, media_type="image/jpeg")
         else:
             raise HTTPException(status_code=404, detail="缩略图不存在")
-    
+
     if file_path.exists():
-        if file_path.suffix.lower() == ".mp4":
+        suffix = file_path.suffix.lower()
+        if suffix == ".mp4":
             print(f"[Server] 返回MP4文件")
             return FileResponse(file_path, media_type="video/mp4")
-        elif file_path.suffix.lower() == ".jpg":
+        elif suffix == ".webm":
+            return FileResponse(file_path, media_type="video/webm")
+        elif suffix == ".mov":
+            return FileResponse(file_path, media_type="video/quicktime")
+        elif suffix == ".mp3":
+            print(f"[Server] 返回MP3音频文件")
+            return FileResponse(file_path, media_type="audio/mpeg")
+        elif suffix == ".m4a":
+            return FileResponse(file_path, media_type="audio/mp4")
+        elif suffix == ".wav":
+            return FileResponse(file_path, media_type="audio/wav")
+        elif suffix == ".ogg":
+            return FileResponse(file_path, media_type="audio/ogg")
+        elif suffix == ".flac":
+            return FileResponse(file_path, media_type="audio/flac")
+        elif suffix == ".aac":
+            return FileResponse(file_path, media_type="audio/aac")
+        elif suffix == ".jpg":
             print(f"[Server] 返回JPG文件")
             return FileResponse(file_path, media_type="image/jpeg")
         else:
@@ -599,51 +699,77 @@ async def get_video(path: str, thumbnail: bool = False):
 
 
 @app.post("/api/video/analyze", response_class=JSONResponse)
-async def analyze_video(path: str = "", background_tasks: BackgroundTasks = None):
+async def analyze_video(path: str = "", background_tasks: BackgroundTasks = None, media_type: str = "video"):
     if not path:
         raise HTTPException(status_code=400, detail="路径不能为空")
-    
-    video_path = VIDEO_DIR / path
 
-    if not video_path.exists():
+    if media_type not in ("video", "audio"):
+        media_type = "video"
+
+    base_dir = get_base_dir(media_type)
+    file_path = base_dir / path
+
+    if not file_path.exists():
         raise HTTPException(status_code=404, detail="文件不存在")
-    
+
     # 创建异步任务
-    task_id = create_task("video_transcribe", {"path": path})
-    
+    task_id = create_task("video_transcribe", {"path": path, "media_type": media_type})
+
     # 后台执行任务
     if background_tasks:
-        background_tasks.add_task(process_video_transcribe_task, task_id, str(video_path))
-    
+        background_tasks.add_task(process_video_transcribe_task, task_id, str(file_path), media_type)
+
     return {
         "success": True,
         "task_id": task_id,
+        "media_type": media_type,
         "message": "转录任务已启动"
     }
 
 
-def process_video_transcribe_task(task_id: str, video_path: str):
-    """处理视频转录任务"""
+def process_video_transcribe_task(task_id: str, video_path: str, media_type: str = "video"):
+    """处理视频/音频转录任务"""
     try:
-        update_task(task_id, status=TASK_STATUS_RUNNING, progress=5, message="正在转换视频到音频...")
-        
-        # 1. 视频转 MP3 - 必须成功才能继续
         video_file = Path(video_path)
-        audio_path = str(video_file.with_suffix(".mp3"))
-        
-        convert_success, error_msg = video_to_audio(video_path, audio_path)
-        
-        if not convert_success:
-            update_task(
-                task_id, 
-                status=TASK_STATUS_FAILED, 
-                progress=0, 
-                message=error_msg or "视频转音频失败"
-            )
-            return
-        
-        update_task(task_id, status=TASK_STATUS_RUNNING, progress=20, message="音频转换完成，开始语音识别...")
-        
+
+        # 如果调用方传了 media_type，以 media_type 为准；否则用扩展名判断
+        if media_type not in ("video", "audio"):
+            media_type = "audio" if is_audio_file(video_file) else "video"
+
+        base_dir = get_base_dir(media_type)
+
+        # 1. 视频转 MP3 - 音频文件走旁路
+        if media_type == "audio":
+            update_task(task_id, status=TASK_STATUS_RUNNING, progress=5, message="检测到音频文件，跳过转码...")
+            # 已经是 mp3 则直接使用；其他音频通过 video_to_audio 转 mp3
+            if video_file.suffix.lower() == ".mp3":
+                audio_path = str(video_file)
+            else:
+                audio_path = str(video_file.with_suffix(".mp3"))
+                convert_success, error_msg = video_to_audio(str(video_file), audio_path)
+                if not convert_success:
+                    update_task(
+                        task_id,
+                        status=TASK_STATUS_FAILED,
+                        progress=0,
+                        message=error_msg or "音频转码失败"
+                    )
+                    return
+            update_task(task_id, status=TASK_STATUS_RUNNING, progress=20, message="音频准备完成，开始语音识别...")
+        else:
+            update_task(task_id, status=TASK_STATUS_RUNNING, progress=5, message="正在转换视频到音频...")
+            audio_path = str(video_file.with_suffix(".mp3"))
+            convert_success, error_msg = video_to_audio(str(video_file), audio_path)
+            if not convert_success:
+                update_task(
+                    task_id,
+                    status=TASK_STATUS_FAILED,
+                    progress=0,
+                    message=error_msg or "视频转音频失败"
+                )
+                return
+            update_task(task_id, status=TASK_STATUS_RUNNING, progress=20, message="音频转换完成，开始语音识别...")
+
         # 2. 语音识别 - 带进度回调
         def progress_callback(phase, progress, message):
             phase_ranges = {
@@ -655,19 +781,20 @@ def process_video_transcribe_task(task_id: str, video_path: str):
             start_p, end_p = phase_ranges.get(phase, (20, 100))
             overall_progress = start_p + (progress / 100) * (end_p - start_p)
             update_task(task_id, status=TASK_STATUS_RUNNING, progress=int(overall_progress), message=message)
-        
+
         result = transcribe_audio(audio_path, language="auto", progress_callback=progress_callback)
-        
+
         if result["success"]:
             update_task(task_id, status=TASK_STATUS_COMPLETED, progress=100, message="处理完成", result={
-                "path": str(Path(video_path).relative_to(VIDEO_DIR)),
+                "path": str(Path(video_path).relative_to(base_dir)),
                 "transcript": result["text"],
-                "duration": get_video_duration(video_path),
-                "language": result.get("language", "unknown")
+                "duration": get_video_duration(audio_path),
+                "language": result.get("language", "unknown"),
+                "media_type": media_type
             })
         else:
             update_task(task_id, status=TASK_STATUS_FAILED, progress=0, message=result.get("error", "识别失败"))
-            
+
     except Exception as e:
         import traceback
         error_msg = f"处理失败: {str(e)}"
@@ -681,22 +808,25 @@ def process_video_transcribe_task(task_id: str, video_path: str):
 # ============================================================
 
 @app.post("/api/upload/batch", response_class=JSONResponse)
-async def upload_batch(files: List[UploadFile] = File(...), path: str = ""):
+async def upload_batch(files: List[UploadFile] = File(...), path: str = "", media_type: str = "video"):
     """批量上传文件"""
+    if media_type not in ("video", "audio"):
+        media_type = "video"
     results = []
-    
+
     for file in files:
         try:
-            filename = await save_video_file(file, target_dir=path)
-            
-            video_path = str(filename)
-            thumbnail_path = video_path.replace(".mp4", ".jpg")
-            extract_thumbnail(video_path, thumbnail_path)
-            
+            filename = await save_video_file(file, target_dir=path, media_type=media_type)
+
+            full_path = str(filename)
+            if media_type == "video":
+                thumbnail_path = full_path.replace(".mp4", ".jpg")
+                extract_thumbnail(full_path, thumbnail_path)
+
             results.append({
                 "filename": file.filename,
                 "success": True,
-                "saved_path": str(filename.relative_to(VIDEO_DIR))
+                "saved_path": str(filename.relative_to(get_base_dir(media_type)))
             })
         except Exception as e:
             results.append({
@@ -864,20 +994,25 @@ async def generate_summary_api(request: Request):
         body = await request.json()
         video_path = body.get("video_path", "")
         model = body.get("model", None)
+        media_type = body.get("media_type", "video")
     except Exception:
         raise HTTPException(status_code=400, detail="请求参数解析失败")
-    
+
     if not video_path:
         raise HTTPException(status_code=400, detail="视频路径不能为空")
-    
-    print(f"[Debug Summary] 收到 video_path: {video_path}")
-    
-    video_full_path = VIDEO_DIR / video_path
+
+    if media_type not in ("video", "audio"):
+        media_type = "video"
+    base_dir = get_base_dir(media_type)
+
+    print(f"[Debug Summary] 收到 video_path: {video_path}, media_type: {media_type}")
+
+    video_full_path = base_dir / video_path
     subtitle_path = video_full_path.parent / f"{video_full_path.stem}_subtitle.md"
-    
+
     print(f"[Debug Summary] 字幕文件路径: {subtitle_path}")
     print(f"[Debug Summary] 字幕文件存在: {subtitle_path.exists()}")
-    
+
     if not subtitle_path.exists():
         return JSONResponse(
             status_code=400,
@@ -886,7 +1021,7 @@ async def generate_summary_api(request: Request):
                 "error": f"字幕文件不存在，请先识别语音。路径: {subtitle_path}"
             }
         )
-    
+
     content = read_md_file(str(subtitle_path))
     if not content:
         return JSONResponse(
@@ -896,24 +1031,24 @@ async def generate_summary_api(request: Request):
                 "error": "字幕内容为空"
             }
         )
-    
+
     # 获取当前激活的提供商配置
     config = GLOBAL_CONFIG
     active_provider = config.get("active_provider", "open-ai")
     provider_config = config.get("providers", {}).get(active_provider, {})
     api_url = provider_config.get("api_url", "")
     api_key = provider_config.get("api_key", "")
-    
+
     # 如果没有指定model，使用提供商的默认模型
     if not model:
         model = provider_config.get("default_model", None)
-    
+
     summary = generate_summary_ai(content, api_url=api_url, api_key=api_key, model=model)
-    
+
     summary_path = video_full_path.parent / f"{video_full_path.stem}_summary.md"
     summary_md = format_summary_md(video_full_path.stem, summary, str(video_full_path))
     write_md_file(str(summary_path), summary_md)
-    
+
     return {
         "success": True,
         "content": summary,
@@ -927,20 +1062,25 @@ async def generate_notes_api(request: Request):
         body = await request.json()
         video_path = body.get("video_path", "")
         model = body.get("model", None)
+        media_type = body.get("media_type", "video")
     except Exception:
         raise HTTPException(status_code=400, detail="请求参数解析失败")
-    
+
     if not video_path:
         raise HTTPException(status_code=400, detail="视频路径不能为空")
-    
-    print(f"[Debug Notes] 收到 video_path: {video_path}")
-    
-    video_full_path = VIDEO_DIR / video_path
+
+    if media_type not in ("video", "audio"):
+        media_type = "video"
+    base_dir = get_base_dir(media_type)
+
+    print(f"[Debug Notes] 收到 video_path: {video_path}, media_type: {media_type}")
+
+    video_full_path = base_dir / video_path
     subtitle_path = video_full_path.parent / f"{video_full_path.stem}_subtitle.md"
-    
+
     print(f"[Debug Notes] 字幕文件路径: {subtitle_path}")
     print(f"[Debug Notes] 字幕文件存在: {subtitle_path.exists()}")
-    
+
     if not subtitle_path.exists():
         return JSONResponse(
             status_code=400,
@@ -949,7 +1089,7 @@ async def generate_notes_api(request: Request):
                 "error": f"字幕文件不存在，请先识别语音。路径: {subtitle_path}"
             }
         )
-    
+
     content = read_md_file(str(subtitle_path))
     if not content:
         return JSONResponse(
@@ -959,24 +1099,24 @@ async def generate_notes_api(request: Request):
                 "error": "字幕内容为空"
             }
         )
-    
+
     # 获取当前激活的提供商配置
     config = GLOBAL_CONFIG
     active_provider = config.get("active_provider", "open-ai")
     provider_config = config.get("providers", {}).get(active_provider, {})
     api_url = provider_config.get("api_url", "")
     api_key = provider_config.get("api_key", "")
-    
+
     # 如果没有指定model，使用提供商的默认模型
     if not model:
         model = provider_config.get("default_model", None)
-    
+
     notes = generate_notes_ai(content, api_url=api_url, api_key=api_key, model=model)
-    
+
     notes_path = video_full_path.parent / f"{video_full_path.stem}_notes.md"
     notes_md = format_notes_md(video_full_path.stem, notes, str(video_full_path))
     write_md_file(str(notes_path), notes_md)
-    
+
     return {
         "success": True,
         "content": notes,
@@ -990,15 +1130,20 @@ async def generate_outline_api(request: Request):
         body = await request.json()
         video_path = body.get("video_path", "")
         model = body.get("model", None)
+        media_type = body.get("media_type", "video")
     except Exception:
         raise HTTPException(status_code=400, detail="请求参数解析失败")
-    
+
     if not video_path:
         raise HTTPException(status_code=400, detail="视频路径不能为空")
-    
-    print(f"[Debug Outline] 收到 video_path: {video_path}")
-    
-    video_full_path = VIDEO_DIR / video_path
+
+    if media_type not in ("video", "audio"):
+        media_type = "video"
+    base_dir = get_base_dir(media_type)
+
+    print(f"[Debug Outline] 收到 video_path: {video_path}, media_type: {media_type}")
+
+    video_full_path = base_dir / video_path
     subtitle_path = video_full_path.parent / f"{video_full_path.stem}_subtitle.md"
     
     print(f"[Debug Outline] 字幕文件路径: {subtitle_path}")
@@ -1052,12 +1197,16 @@ async def generate_outline_api(request: Request):
 # ============================================================
 
 @app.get("/api/analysis/subtitle", response_class=JSONResponse)
-async def get_subtitle(path: str = ""):
+async def get_subtitle(path: str = "", media_type: str = "video"):
     if not path:
         raise HTTPException(status_code=400, detail="路径不能为空")
-    
-    video_path = VIDEO_DIR / path
-    subtitle_path = video_path.parent / f"{video_path.stem}_subtitle.md"
+
+    if media_type not in ("video", "audio"):
+        media_type = "video"
+    base_dir = get_base_dir(media_type)
+
+    file_path = base_dir / path
+    subtitle_path = file_path.parent / f"{file_path.stem}_subtitle.md"
     
     if not subtitle_path.exists():
         return {
@@ -1080,14 +1229,20 @@ async def generate_analysis(request: Request):
         video_path = body.get("video_path", "")
         content = body.get("content", "")
         use_ai = body.get("use_ai", True)
+        media_type = body.get("media_type", "video")
     except Exception:
         raise HTTPException(status_code=400, detail="请求参数解析失败")
-    
+
     if not video_path:
         raise HTTPException(status_code=400, detail="视频路径不能为空")
-    
-    result = analyze_and_save(video_path, content)
-    
+
+    if media_type not in ("video", "audio"):
+        media_type = "video"
+    base_dir = get_base_dir(media_type)
+    full_video_path = str(base_dir / video_path)
+
+    result = analyze_and_save(full_video_path, content)
+
     if result["success"]:
         return {
             "success": True,
@@ -1113,20 +1268,24 @@ async def generate_analysis(request: Request):
 
 @app.get("/api/analysis/result", response_class=JSONResponse)
 @app.get("/api/analysis/get-result", response_class=JSONResponse)
-async def get_analysis_result(path: str = "", video_path: str = "", type: str = "summary"):
+async def get_analysis_result(path: str = "", video_path: str = "", type: str = "summary", media_type: str = "video"):
     # 兼容两种参数名
     video_path = path or video_path
     if not video_path:
         raise HTTPException(status_code=400, detail="路径不能为空")
-    
-    video_full_path = VIDEO_DIR / video_path
-    
+
+    if media_type not in ("video", "audio"):
+        media_type = "video"
+    base_dir = get_base_dir(media_type)
+
+    video_full_path = base_dir / video_path
+
     if not video_full_path.exists():
         # 检查是否是带扩展名的路径
         found = False
-        for ext in ['.mp4', '.mov', '.avi', '.webm']:
-            if (VIDEO_DIR / (video_path + ext)).exists():
-                video_full_path = VIDEO_DIR / (video_path + ext)
+        for ext in ['.mp4', '.mov', '.avi', '.webm', '.mp3', '.m4a', '.wav', '.flac', '.ogg', '.aac']:
+            if (base_dir / (video_path + ext)).exists():
+                video_full_path = base_dir / (video_path + ext)
                 found = True
                 break
         if not found:
@@ -1160,12 +1319,16 @@ async def get_analysis_result(path: str = "", video_path: str = "", type: str = 
 
 
 @app.get("/api/analysis/get-all", response_class=JSONResponse)
-async def get_all_analysis(path: str = ""):
+async def get_all_analysis(path: str = "", media_type: str = "video"):
     if not path:
         raise HTTPException(status_code=400, detail="路径不能为空")
-    
-    video_path = VIDEO_DIR / path
-    
+
+    if media_type not in ("video", "audio"):
+        media_type = "video"
+    base_dir = get_base_dir(media_type)
+
+    video_path = base_dir / path
+
     if not video_path.exists():
         raise HTTPException(status_code=404, detail="文件不存在")
     

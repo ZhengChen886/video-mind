@@ -15,6 +15,7 @@ WEB_DIR = PROJECT_ROOT / "web"
 
 # 数据目录
 VIDEO_DIR = DATA_DIR / "mp4"  # 视频存储目录
+AUDIO_DIR = DATA_DIR / "mp3"  # 音频存储目录（独立于视频目录）
 KNOWLEDGE_DIR = DATA_DIR / "mp4"  # 知识库文档目录（使用 mp4）
 KNOWLEDGE_DATA_DIR = DATA_DIR / "knowledge"  # 知识库数据目录（对话、收藏）
 TTS_CACHE_DIR = DATA_DIR / "tts_cache"  # TTS缓存目录
@@ -28,6 +29,7 @@ def ensure_dirs_exist():
     dirs = [
         DATA_DIR,
         VIDEO_DIR,
+        AUDIO_DIR,
         KNOWLEDGE_DIR,
         TTS_CACHE_DIR,
         TTS_AUDIO_DIR,
