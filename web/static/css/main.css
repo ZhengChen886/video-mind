@@ -284,6 +284,14 @@ body {
     background: var(--bg-color);
 }
 
+/* 顶栏按钮文字：保持与 .btn 一致的字号（与"新建目录"按钮对齐） */
+.btn .btn-label,
+.btn-upload-text {
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1;
+}
+
 .btn-danger {
     background: var(--danger-color);
     color: white;
@@ -360,6 +368,9 @@ body {
 
 .menu-item-parent {
     position: relative;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .menu-toggle-icon {
@@ -571,7 +582,7 @@ body {
     align-items: center;
     justify-content: center;
     position: relative;
-    overflow: visible;
+    overflow: hidden;
     border-radius: 12px 12px 0 0;
 }
 
@@ -580,12 +591,17 @@ body {
     height: 100%;
     object-fit: cover;
     border-radius: 12px 12px 0 0;
+    position: absolute;
+    inset: 0;
+    z-index: 1;
 }
 
 .card-thumbnail svg {
     width: 48px;
     height: 48px;
     color: var(--text-muted);
+    position: relative;
+    z-index: 0;
 }
 
 .card-thumbnail.video::before {
@@ -595,6 +611,8 @@ body {
     height: 50px;
     background: rgba(0, 0, 0, 0.6);
     border-radius: 50%;
+    z-index: 2;
+    pointer-events: none;
 }
 
 .card-thumbnail.video::after {
@@ -603,6 +621,8 @@ body {
     color: white;
     font-size: 18px;
     margin-left: 4px;
+    z-index: 3;
+    pointer-events: none;
 }
 
 .card-actions-btn {

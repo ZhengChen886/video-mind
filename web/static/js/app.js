@@ -11,7 +11,9 @@ let currentView = 'cards';
 let selectedItems = [];
 let currentVideo = null;
 let isShowingDocuments = false;
+let isShowingAudio = false;
 let currentDocType = 'all';
+let currentAudioPath = '';  // 当前音频子菜单路径
 let selectedVideoPaths = []; // 用于批量转录的选中视频
 let currentTranscribeTaskId = null;
 let transcribePollingInterval = null;
@@ -121,7 +123,11 @@ function switchPage(pageName) {
             loadDashboardCharts();
             loadRecentActivity();
         } else if (pageName === 'videos') {
-            loadFiles();
+            if (isShowingAudio) {
+                loadAudioFiles();
+            } else {
+                loadFiles();
+            }
             loadDirectories();
         } else if (pageName === 'knowledge') {
             if (window.KnowledgeApp) {
@@ -429,45 +435,124 @@ function bindChartControls() {
 // ============================
 async function loadFiles() {
     isShowingDocuments = false;
+    isShowingAudio = false;
+    updateTopBarMode();
     const searchQuery = document.getElementById('searchInput').value.toLowerCase();
-    
+
     try {
-        const response = await fetch(`${API_BASE_URL}/api/files?path=${encodeURIComponent(currentPath)}`);
+        const response = await fetch(`${API_BASE_URL}/api/files?path=${encodeURIComponent(currentPath)}&media_type=video`);
         const data = await response.json();
-        
+
         if (data.success) {
-            renderFiles(data.items, searchQuery);
-            updatePathNav();
+            // 后端已按 media_type=video 过滤；目录保留
+            const videoItems = (data.items || []).filter(item => item.type === 'directory' || item.media_type === 'video');
+            renderFiles(videoItems, searchQuery, { mode: 'video' });
+            updatePathNav('视频库');
         }
     } catch (error) {
         console.error('加载文件失败:', error);
-        renderFiles([], '');
+        renderFiles([], '', { mode: 'video' });
+    }
+}
+
+// 加载音频文件
+async function loadAudioFiles() {
+    isShowingDocuments = false;
+    isShowingAudio = true;
+    updateTopBarMode();
+    const searchQuery = document.getElementById('searchInput').value.toLowerCase();
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/files?path=${encodeURIComponent(currentAudioPath)}&media_type=audio`);
+        const data = await response.json();
+
+        if (data.success) {
+            // 过滤仅音频
+            const audioItems = (data.items || []).filter(item => {
+                if (item.type === 'directory') return true;
+                return item.media_type === 'audio';
+            });
+            renderFiles(audioItems, searchQuery, { mode: 'audio' });
+            updatePathNav('音频库');
+        }
+    } catch (error) {
+        console.error('加载音频失败:', error);
+        renderFiles([], '', { mode: 'audio' });
+    }
+}
+
+// 同步顶部操作栏按钮的文案/图标（音频模式下显示"上传音频"，视频模式保持原样）
+function updateTopBarMode() {
+    const btnUpload = document.getElementById('btnUpload');
+    const btnUrlUpload = document.getElementById('btnUrlUpload');
+    const modalUploadTitle = document.getElementById('modalUploadTitle');
+    const uploadFileInput = document.getElementById('uploadFileInput');
+    const uploadFormatHint = document.getElementById('uploadFormatHint');
+    const modalUrlUploadTitle = document.querySelector('#modalUrlUpload .modal-header span');
+
+    if (isShowingAudio) {
+        // 切换为音频模式
+        if (btnUpload) {
+            const iconVideo = btnUpload.querySelector('.btn-icon-video');
+            const iconAudio = btnUpload.querySelector('.btn-icon-audio');
+            const text = btnUpload.querySelector('.btn-label');
+            if (iconVideo) iconVideo.style.display = 'none';
+            if (iconAudio) iconAudio.style.display = 'inline-block';
+            if (text) text.textContent = '上传音频';
+        }
+        if (btnUrlUpload) {
+            const text = btnUrlUpload.querySelector('.btn-label');
+            if (text) text.textContent = '音频链接';
+        }
+        if (modalUploadTitle) modalUploadTitle.textContent = '上传音频';
+        if (uploadFileInput) uploadFileInput.setAttribute('accept', 'audio/*');
+        if (uploadFormatHint) uploadFormatHint.textContent = '支持格式: MP3, M4A, WAV, FLAC, OGG, AAC 等';
+        if (modalUrlUploadTitle) modalUrlUploadTitle.textContent = '音频链接下载';
+    } else {
+        // 恢复为视频模式
+        if (btnUpload) {
+            const iconVideo = btnUpload.querySelector('.btn-icon-video');
+            const iconAudio = btnUpload.querySelector('.btn-icon-audio');
+            const text = btnUpload.querySelector('.btn-label');
+            if (iconVideo) iconVideo.style.display = 'inline-block';
+            if (iconAudio) iconAudio.style.display = 'none';
+            if (text) text.textContent = '上传视频';
+        }
+        if (btnUrlUpload) {
+            const text = btnUrlUpload.querySelector('.btn-label');
+            if (text) text.textContent = '链接上传';
+        }
+        if (modalUploadTitle) modalUploadTitle.textContent = '上传视频';
+        if (uploadFileInput) uploadFileInput.setAttribute('accept', 'video/*');
+        if (uploadFormatHint) uploadFormatHint.textContent = '支持格式: MP4, WebM, MOV, AVI, MKV 等';
+        if (modalUrlUploadTitle) modalUrlUploadTitle.textContent = '链接下载';
     }
 }
 
 // 更新路径导航
-function updatePathNav() {
+function updatePathNav(rootLabel) {
     const pathNav = document.querySelector('.path-nav');
     if (!pathNav) return;
-    
+
     let html = '';
-    
-    // "视频库" 根节点
-    html += `<span class="path-segment" data-path="" style="cursor:pointer;color:var(--primary);">视频库</span>`;
-    
+    const rootName = rootLabel || (isShowingAudio ? '音频库' : '视频库');
+
+    // 根节点
+    html += `<span class="path-segment" data-path="" style="cursor:pointer;color:var(--primary);">${rootName}</span>`;
+
     // 分割路径
     if (currentPath) {
         const pathParts = currentPath.split(/[\\/]/).filter(p => p);
         let accumulatedPath = '';
-        
+
         pathParts.forEach((part, index) => {
             html += `<svg viewBox="0 0 24 24" style="width:14px;height:14px;margin:0 8px;" fill="currentColor">
                 <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/>
             </svg>`;
-            
+
             accumulatedPath = accumulatedPath ? `${accumulatedPath}/${part}` : part;
             const isLast = index === pathParts.length - 1;
-            
+
             html += `<span class="path-segment" data-path="${escapeHtml(accumulatedPath)}" style="cursor:pointer;${isLast ? 'color:var(--text-primary);font-weight:500;' : 'color:var(--primary);'}">${escapeHtml(part)}</span>`;
         });
     } else {
@@ -475,11 +560,11 @@ function updatePathNav() {
         html += `<svg viewBox="0 0 24 24" style="width:14px;height:14px;margin:0 8px;" fill="currentColor">
             <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/>
         </svg>`;
-        html += `<span class="path-segment" data-path="" style="cursor:pointer;color:var(--text-primary);font-weight:500;">全部视频</span>`;
+        html += `<span class="path-segment" data-path="" style="cursor:pointer;color:var(--text-primary);font-weight:500;">${isShowingAudio ? '全部音频' : '全部视频'}</span>`;
     }
-    
+
     pathNav.innerHTML = html;
-    
+
     // 绑定点击事件
     pathNav.querySelectorAll('.path-segment').forEach(segment => {
         segment.addEventListener('click', () => {
@@ -494,16 +579,28 @@ function updatePathNav() {
 // 导航到指定路径
 function navigateToPath(path) {
     currentPath = path;
-    loadFiles();
+    if (isShowingAudio) {
+        currentAudioPath = path;
+        loadAudioFiles();
+    } else {
+        loadFiles();
+    }
     updateSidebarActiveState();
 }
 
 // 更新侧边栏激活状态
 function updateSidebarActiveState() {
-    // 只处理子菜单项（排除父菜单项）
+    // 视频子菜单激活状态
     document.querySelectorAll('#videos-submenu .menu-item:not(.menu-item-parent)').forEach(item => {
         item.classList.remove('active');
-        if (item.dataset.path === currentPath) {
+        if (!isShowingAudio && item.dataset.path === currentPath) {
+            item.classList.add('active');
+        }
+    });
+    // 音频子菜单激活状态（与视频共用 data-path）
+    document.querySelectorAll('#audios-submenu .menu-item:not(.menu-item-parent)').forEach(item => {
+        item.classList.remove('active');
+        if (isShowingAudio && item.dataset.path === currentAudioPath) {
             item.classList.add('active');
         }
     });
@@ -513,14 +610,14 @@ function updateSidebarActiveState() {
 async function loadSidebarVideoFolders() {
     const submenu = document.getElementById('videos-submenu');
     if (!submenu) return;
-    
+
     try {
-        const response = await fetch(`${API_BASE_URL}/api/files?path=`);
+        const response = await fetch(`${API_BASE_URL}/api/files?path=&media_type=video`);
         const data = await response.json();
-        
+
         if (data.success) {
             const dirs = data.items.filter(item => item.type === 'directory');
-            
+
             let html = '';
             // "全部视频" 根选项
             html += `<div class="menu-item" data-path="">
@@ -530,7 +627,7 @@ async function loadSidebarVideoFolders() {
                 </svg>
                 <span>全部视频</span>
             </div>`;
-            
+
             // 实际文件夹
             dirs.forEach(dir => {
                 html += `<div class="menu-item" data-path="${escapeHtml(dir.path)}">
@@ -540,31 +637,131 @@ async function loadSidebarVideoFolders() {
                     <span>${escapeHtml(dir.name)}</span>
                 </div>`;
             });
-            
+
             submenu.innerHTML = html;
-            
+
             // 重新绑定事件
             bindSidebarEvents();
             updateSidebarActiveState();
+
+            // 同步加载音频子菜单
+            await loadSidebarAudioFolders();
         }
     } catch (error) {
         console.error('加载侧边栏文件夹失败:', error);
     }
 }
 
-// 绑定侧边栏事件
+// 动态加载侧边栏音频子菜单
+async function loadSidebarAudioFolders() {
+    const submenu = document.getElementById('audios-submenu');
+    if (!submenu) return;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/files?path=&media_type=audio`);
+        const data = await response.json();
+
+        if (data.success) {
+            const dirs = data.items.filter(item => item.type === 'directory');
+
+            let html = '';
+            // "全部音频" 根选项（与视频子菜单共用 data-path）
+            html += `<div class="menu-item" data-path="">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 18V5l12-2v13"/>
+                    <circle cx="6" cy="18" r="3"/>
+                    <circle cx="18" cy="16" r="3"/>
+                </svg>
+                <span>全部音频</span>
+            </div>`;
+
+            // 实际文件夹
+            dirs.forEach(dir => {
+                html += `<div class="menu-item" data-path="${escapeHtml(dir.path)}">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/>
+                    </svg>
+                    <span>${escapeHtml(dir.name)}</span>
+                </div>`;
+            });
+
+            submenu.innerHTML = html;
+
+            // 重新绑定音频子菜单事件
+            bindSidebarEvents();
+            updateSidebarActiveState();
+        }
+    } catch (error) {
+        console.error('加载侧边栏音频文件夹失败:', error);
+    }
+}
+
+// 绑定侧边栏事件（视频 + 音频子菜单共用 data-path，通过父容器区分）
 function bindSidebarEvents() {
     // 视频子菜单点击
     document.querySelectorAll('#videos-submenu .menu-item').forEach(item => {
         item.addEventListener('click', (e) => {
             e.stopPropagation();
-            // 只移除子菜单项的 active 类，排除父菜单项
             document.querySelectorAll('.menu-item:not(.menu-item-parent)').forEach(i => i.classList.remove('active'));
             item.classList.add('active');
             isShowingDocuments = false;
-            currentPath = item.dataset.path;
+            isShowingAudio = false;
+            currentPath = item.dataset.path || '';
             loadFiles();
         });
+    });
+    // 音频子菜单点击（与视频共用 data-path，靠 isShowingAudio 区分）
+    document.querySelectorAll('#audios-submenu .menu-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+            e.stopPropagation();
+            document.querySelectorAll('.menu-item:not(.menu-item-parent)').forEach(i => i.classList.remove('active'));
+            item.classList.add('active');
+            isShowingDocuments = false;
+            isShowingAudio = true;
+            const audioPath = item.dataset.path || '';
+            currentPath = audioPath;
+            currentAudioPath = audioPath;
+            loadAudioFiles();
+        });
+    });
+}
+
+// 父菜单展开/收起通用函数（与视频/文档同款）
+function toggleSubmenu(action) {
+    const submenuId = {
+        'toggle-videos':    'videos-submenu',
+        'toggle-audios':    'audios-submenu',
+        'toggle-documents': 'documents-submenu'
+    }[action];
+    if (!submenuId) return;
+    const submenu = document.getElementById(submenuId);
+    if (!submenu) return;
+    submenu.classList.toggle('submenu-open');
+    // 找到对应的父菜单项
+    const parentItem = document.querySelector(`[data-action="${action}"]`);
+    if (parentItem) {
+        const toggleIcon = parentItem.querySelector('.menu-toggle-icon');
+        if (toggleIcon) {
+            toggleIcon.style.transform = submenu.classList.contains('submenu-open')
+                ? 'rotate(0deg)'
+                : 'rotate(-90deg)';
+        }
+    }
+}
+
+// 直接绑定父菜单的点击事件（使用事件委托，确保浏览器兼容性）
+function bindParentMenuToggles() {
+    const sidebar = document.querySelector('.sidebar-menu');
+    if (!sidebar) return;
+    // 用事件委托，父菜单点击时只处理 toggle-* 父项
+    sidebar.addEventListener('click', (e) => {
+        const parent = e.target.closest('.menu-item-parent');
+        if (!parent) return;
+        const action = parent.dataset.action;
+        if (!action || !action.startsWith('toggle-')) return;
+        e.stopPropagation();
+        e.preventDefault();
+        toggleSubmenu(action);
     });
 }
 
@@ -696,8 +893,9 @@ function renderDocumentListView(items) {
     return html;
 }
 
-function renderFiles(items, searchQuery) {
+function renderFiles(items, searchQuery, options) {
     const contentArea = document.getElementById('contentArea');
+    const mode = (options && options.mode) || 'video';
     if (!items || items.length === 0) {
         contentArea.innerHTML = `
             <div class="empty-state">
@@ -728,27 +926,42 @@ function renderFiles(items, searchQuery) {
     }
 
     if (currentView === 'cards') {
-        contentArea.innerHTML = renderCardsView(filteredItems);
-        // 加载缩略图
-        setTimeout(loadThumbnails, 100);
+        contentArea.innerHTML = renderCardsView(filteredItems, { mode });
+        // 加载缩略图（仅视频）
+        if (mode === 'video') {
+            setTimeout(loadThumbnails, 100);
+        }
     } else {
-        contentArea.innerHTML = renderListView(filteredItems);
+        contentArea.innerHTML = renderListView(filteredItems, { mode });
     }
 
     bindFileEvents();
 }
 
-function renderCardsView(items) {
+function renderCardsView(items, options) {
+    const mode = (options && options.mode) || 'video';
     let html = '<div class="cards-view">';
     items.forEach(item => {
         if (item.type === 'directory') {
             html += `
-                <div class="file-card" data-path="${escapeHtml(item.path)}" data-type="directory">
+                <div class="file-card" data-path="${escapeHtml(item.path)}" data-type="directory" data-item-name="${escapeHtml(item.name)}">
                     <div class="card-thumbnail-wrapper">
                         <div class="card-thumbnail">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
                             </svg>
+                            <button class="card-actions-btn" data-item-path="${escapeHtml(item.path)}">
+                                <svg viewBox="0 0 24 24" style="width:16px;height:16px" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="1"/>
+                                    <circle cx="19" cy="12" r="1"/>
+                                    <circle cx="5" cy="12" r="1"/>
+                                </svg>
+                            </button>
+                            <div class="card-actions-menu" style="top: 44px; right: 8px; z-index: 100;">
+                                <button class="action-item" data-action="rename">重命名</button>
+                                <button class="action-item" data-action="move">移动</button>
+                                <button class="action-item danger" data-action="delete">删除</button>
+                            </div>
                         </div>
                     </div>
                     <div class="card-info">
@@ -759,23 +972,29 @@ function renderCardsView(items) {
         } else {
             // 构建缩略图 URL，将反斜杠替换为正斜杠
             const pathForUrl = item.path.replace(/\\/g, '/');
+            const isAudioItem = (item.media_type === 'audio') || /\.(mp3|m4a|wav|flac|ogg|aac)$/i.test(item.name);
             const thumbnailUrl = `${API_BASE_URL}/api/video/${encodeURIComponent(pathForUrl)}?thumbnail=true`;
             const isSelected = selectedVideoPaths.includes(item.path);
+            const mediaBadge = isAudioItem
+                ? '<div style="position:absolute;top:8px;right:8px;z-index:10;background:rgba(99,102,241,0.9);color:#fff;font-size:11px;padding:2px 6px;border-radius:4px;">音频</div>'
+                : '';
+            const placeholderIcon = isAudioItem
+                ? '<svg viewBox="0 0 24 24" style="width:48px;height:48px;color:#6366f1" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>'
+                : '<svg viewBox="0 0 24 24" style="width:48px;height:48px;color:#94a3b8" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2.1" ry="2.1"/></svg>';
             html += `
-                <div class="file-card ${isSelected ? 'selected' : ''}" data-path="${escapeHtml(item.path)}" data-type="file">
+                <div class="file-card ${isSelected ? 'selected' : ''}" data-path="${escapeHtml(item.path)}" data-type="file" data-media-type="${isAudioItem ? 'audio' : 'video'}">
                     <div style="position: absolute; top: 8px; left: 8px; z-index: 10;">
-                        <input type="checkbox" 
-                               ${isSelected ? 'checked' : ''} 
+                        <input type="checkbox"
+                               ${isSelected ? 'checked' : ''}
                                onchange="toggleVideoSelection(this.closest('.file-card').dataset.path)"
                                style="width: 18px; height: 18px; cursor: pointer;">
                     </div>
+                    ${mediaBadge}
                     <div class="card-thumbnail-wrapper">
-                        <div class="card-thumbnail video" data-thumbnail="${thumbnailUrl}">
+                        <div class="card-thumbnail ${isAudioItem ? 'audio' : 'video'}" ${isAudioItem ? '' : `data-thumbnail="${thumbnailUrl}"`}>
                             <!-- 缩略图将通过 JS 动态加载 -->
                             <div class="thumbnail-placeholder" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;">
-                                <svg viewBox="0 0 24 24" style="width:48px;height:48px;color:#94a3b8" fill="none" stroke="currentColor" stroke-width="2">
-                                    <rect x="2" y="2" width="20" height="20" rx="2.1" ry="2.1"/>
-                                </svg>
+                                ${placeholderIcon}
                             </div>
                             <button class="card-actions-btn" data-item-path="${escapeHtml(item.path)}">
                                 <svg viewBox="0 0 24 24" style="width:16px;height:16px" fill="none" stroke="currentColor" stroke-width="2">
@@ -804,7 +1023,8 @@ function renderCardsView(items) {
     return html;
 }
 
-function renderListView(items) {
+function renderListView(items, options) {
+    const mode = (options && options.mode) || 'video';
     let html = `
         <div class="list-view">
             <div class="list-header">
@@ -816,45 +1036,45 @@ function renderListView(items) {
             </div>
     `;
     items.forEach(item => {
-        const iconSvg = item.type === 'directory' 
+        const isAudioItem = (item.media_type === 'audio') || /\.(mp3|m4a|wav|flac|ogg|aac)$/i.test(item.name);
+        const iconPath = item.type === 'directory'
             ? '<path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>'
-            : '<rect x="2" y="2" width="20" height="20" rx="2.1" ry="2.1"/>';
+            : (isAudioItem
+                ? '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>'
+                : '<rect x="2" y="2" width="20" height="20" rx="2.1" ry="2.1"/>');
 
         const isSelected = selectedVideoPaths.includes(item.path);
         const isVideoFile = item.type === 'file';
 
         html += `
-            <div class="list-item ${isVideoFile && isSelected ? 'selected' : ''}" data-path="${escapeHtml(item.path)}" data-type="${item.type}">
+            <div class="list-item" data-path="${escapeHtml(item.path)}" data-type="${item.type}" data-item-name="${escapeHtml(item.name)}" data-media-type="${isAudioItem ? 'audio' : 'video'}">
                 <div class="list-icon">
                     ${isVideoFile ? `
-                        <input type="checkbox" 
-                            ${isSelected ? 'checked' : ''} 
+                        <input type="checkbox"
+                            ${isSelected ? 'checked' : ''}
                             onclick="event.stopPropagation(); toggleVideoSelection(this.closest('.list-item').dataset.path)"
                             style="width:18px;height:18px;cursor:pointer;margin-right:8px">
                     ` : ''}
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        ${iconSvg}
+                        ${iconPath}
                     </svg>
                 </div>
                 <div class="list-name">${escapeHtml(item.name)}</div>
-                <div class="list-meta">${formatFileSize(item.size)}</div>
+                <div class="list-meta">${item.type === 'directory' ? '-' : formatFileSize(item.size)}</div>
                 <div class="list-meta">-</div>
                 <div style="position: relative;">
-                    ${isVideoFile ? `
-                        <button class="card-actions-btn" data-item-path="${escapeHtml(item.path)}">
-                            <svg viewBox="0 0 24 24" style="width:16px;height:16px" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="12" cy="12" r="1"/>
-                                <circle cx="19" cy="12" r="1"/>
-                                <circle cx="5" cy="12" r="1"/>
-                            </svg>
-                        </button>
-                        <!-- 列表内部的菜单 -->
-                        <div class="card-actions-menu" style="top: 100%; right: 0; margin-top: 4px; z-index: 100;">
-                            <button class="action-item" data-action="rename">重命名</button>
-                            <button class="action-item" data-action="move">移动</button>
-                            <button class="action-item danger" data-action="delete">删除</button>
-                        </div>
-                    ` : ''}
+                    <button class="card-actions-btn" data-item-path="${escapeHtml(item.path)}">
+                        <svg viewBox="0 0 24 24" style="width:16px;height:16px" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="1"/>
+                            <circle cx="19" cy="12" r="1"/>
+                            <circle cx="5" cy="12" r="1"/>
+                        </svg>
+                    </button>
+                    <div class="card-actions-menu" style="top: 100%; right: 0; margin-top: 4px; z-index: 100;">
+                        <button class="action-item" data-action="rename">重命名</button>
+                        <button class="action-item" data-action="move">移动</button>
+                        <button class="action-item danger" data-action="delete">删除</button>
+                    </div>
                 </div>
             </div>
         `;
@@ -866,25 +1086,40 @@ function renderListView(items) {
 function loadThumbnails() {
     document.querySelectorAll('.card-thumbnail.video').forEach(thumbnail => {
         const thumbnailUrl = thumbnail.dataset.thumbnail;
-        if (thumbnailUrl) {
-            const placeholder = thumbnail.querySelector('.thumbnail-placeholder');
-            if (placeholder) {
-                const img = document.createElement('img');
-                img.src = thumbnailUrl;
-                img.style.width = '100%';
-                img.style.height = '100%';
-                img.style.objectFit = 'cover';
-                img.onload = () => {
-                    placeholder.style.display = 'none';
-                    img.style.display = 'block';
-                };
-                img.onerror = () => {
-                    // 如果加载失败，保持原样
-                };
-                // 添加到缩略图容器的前面
-                thumbnail.insertBefore(img, thumbnail.firstChild);
+        if (!thumbnailUrl) return;
+
+        const placeholder = thumbnail.querySelector('.thumbnail-placeholder');
+
+        // 清理旧的 img，避免重复渲染造成堆叠
+        thumbnail.querySelectorAll('img.card-thumbnail-img').forEach(old => old.remove());
+
+        const img = document.createElement('img');
+        img.className = 'card-thumbnail-img';
+        img.alt = '';
+        img.decoding = 'async';
+        img.loading = 'lazy';
+        // 让 img 始终是块级且填满容器，避免与 placeholder 重叠
+        img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;position:absolute;inset:0;z-index:1;';
+
+        let finished = false;
+        const finish = (ok) => {
+            if (finished) return;
+            finished = true;
+            if (ok && placeholder) {
+                placeholder.style.display = 'none';
             }
-        }
+        };
+
+        img.onload = () => finish(true);
+        img.onerror = () => {
+            // 加载失败：移除 img，回退到 placeholder
+            img.remove();
+            finish(false);
+        };
+
+        img.src = thumbnailUrl;
+        // 添加到缩略图容器中
+        thumbnail.appendChild(img);
     });
 }
 
@@ -899,12 +1134,20 @@ function toggleVideoSelection(path) {
         selectedVideoPaths.push(path);
     }
     updateBatchToolbar();
-    renderFilesWithSelection();
+    if (isShowingAudio) {
+        loadAudioFiles();
+    } else {
+        renderFilesWithSelection();
+    }
 }
 
 function renderFilesWithSelection() {
     // 重新渲染，但保持当前状态
-    loadFiles();
+    if (isShowingAudio) {
+        loadAudioFiles();
+    } else {
+        loadFiles();
+    }
 }
 
 function updateBatchToolbar() {
@@ -924,18 +1167,18 @@ function updateBatchToolbar() {
 function toggleSelectAll() {
     const contentArea = document.getElementById('contentArea');
     const items = contentArea.querySelectorAll('.file-card[data-type="file"], .list-item[data-type="file"]');
-    
-    // 获取所有视频路径
+
+    // 获取所有可选择路径
     const allVideoPaths = Array.from(items).map(el => el.dataset.path);
-    
-    if (selectedVideoPaths.length === allVideoPaths.length) {
+
+    if (selectedVideoPaths.length === allVideoPaths.length && allVideoPaths.length > 0) {
         // 全部取消选择
         selectedVideoPaths = [];
     } else {
         // 全选
         selectedVideoPaths = allVideoPaths;
     }
-    
+
     updateBatchToolbar();
     renderFilesWithSelection();
 }
@@ -1146,8 +1389,9 @@ document.addEventListener('click', () => {
 });
 
 async function loadDirectories() {
+    const media_type = isShowingAudio ? 'audio' : 'video';
     try {
-        const response = await fetch(`${API_BASE_URL}/api/files?path=`);
+        const response = await fetch(`${API_BASE_URL}/api/files?path=&media_type=${media_type}`);
         const data = await response.json();
 
         if (data.success) {
@@ -1194,21 +1438,32 @@ async function createFolder() {
     const name = document.getElementById('folderNameInput').value.trim();
     if (!name) return;
 
+    const media_type = isShowingAudio ? 'audio' : 'video';
+    const basePath = isShowingAudio ? currentAudioPath : currentPath;
+
     try {
         const response = await fetch(`${API_BASE_URL}/api/folders`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ path: currentPath, name: name })
+            body: JSON.stringify({ path: basePath, name: name, media_type })
         });
         const data = await response.json();
 
         if (data.success) {
             document.getElementById('modalNewFolder').classList.remove('show');
             document.getElementById('folderNameInput').value = '';
-            loadFiles();
+            if (isShowingAudio) {
+                loadAudioFiles();
+            } else {
+                loadFiles();
+            }
             loadDirectories();
             // 刷新侧边栏文件夹
-            loadSidebarVideoFolders();
+            if (isShowingAudio) {
+                loadSidebarAudioFolders();
+            } else {
+                loadSidebarVideoFolders();
+            }
         } else {
             alert('创建失败: ' + data.error);
         }
@@ -1256,18 +1511,21 @@ function removeSelectedFile(index) {
 
 async function uploadFile() {
     if (selectedUploadFiles.length === 0) return;
-    
+
     const formData = new FormData();
     selectedUploadFiles.forEach(file => {
         formData.append('files', file);
     });
-    formData.append('path', currentPath);
-    
+    const media_type = isShowingAudio ? 'audio' : 'video';
+    const basePath = isShowingAudio ? currentAudioPath : currentPath;
+    formData.append('path', basePath);
+    formData.append('media_type', media_type);
+
     const progressContainer = document.getElementById('uploadProgressContainer');
     const progressList = document.getElementById('uploadProgressList');
     progressContainer.style.display = 'block';
     progressList.innerHTML = '<div>正在上传...</div>';
-    
+
     try {
         const response = await fetch(`${API_BASE_URL}/api/upload/batch`, {
             method: 'POST',
@@ -1282,14 +1540,18 @@ async function uploadFile() {
                     ${!r.success ? ` - ${r.error}` : ''}
                 </div>
             `).join('');
-            
+
             setTimeout(() => {
                 document.getElementById('modalUpload').classList.remove('show');
                 document.getElementById('uploadFileInput').value = '';
                 selectedUploadFiles = [];
                 updateSelectedFilesList();
                 progressContainer.style.display = 'none';
-                loadFiles();
+                if (isShowingAudio) {
+                    loadAudioFiles();
+                } else {
+                    loadFiles();
+                }
             }, 1500);
         } else {
             alert('上传失败');
@@ -1331,6 +1593,7 @@ function extractFilenameFromUrl(url) {
 
 async function uploadByUrl() {
     const targetDir = document.getElementById('urlUploadDir').value;
+    const media_type = isShowingAudio ? 'audio' : 'video';
 
     if (urlDownloadItems.length === 0) return;
 
@@ -1342,7 +1605,7 @@ async function uploadByUrl() {
         const response = await fetch(`${API_BASE_URL}/api/upload/url/batch`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ items: urlDownloadItems, target_dir: targetDir })
+            body: JSON.stringify({ items: urlDownloadItems, target_dir: targetDir, media_type })
         });
         const data = await response.json();
 
@@ -1593,22 +1856,77 @@ function removeUrlItem(index) {
 // ============================
 // Video Detail
 // ============================
+function isAudioPath(path) {
+    if (!path) return false;
+    return /\.(mp3|m4a|wav|flac|ogg|aac)$/i.test(path);
+}
+
 async function openVideoDetail(path) {
-    currentVideo = { path };
+    const isAudio = isAudioPath(path);
+    currentVideo = { path, media_type: isAudio ? 'audio' : 'video' };
     document.getElementById('detailPanel').classList.add('show');
     document.getElementById('detailName').textContent = path.split(/[\\/]/).pop();
 
-    // 清空之前的解析结果（参考 index.html 的实现）
-    document.getElementById('summaryContent').innerHTML = '点击「视频转录」获取原文，然后生成总结';
+    // 详情面板标题：音频显示"音频详情"，视频保持"视频详情"
+    const detailPanelTitle = document.getElementById('detailPanelTitle');
+    if (detailPanelTitle) {
+        detailPanelTitle.textContent = isAudio ? '音频详情' : '视频详情';
+    }
+
+    // 占位提示文本：音频显示"音频转录"，视频保持"视频转录"
+    const transcribeLabel = isAudio ? '音频转录' : '视频转录';
+    document.getElementById('summaryContent').innerHTML = `点击「${transcribeLabel}」获取原文，然后生成总结`;
     document.getElementById('notesContent').innerHTML = '<p>暂无笔记</p>';
     document.getElementById('outlineContent').innerHTML = '<p>暂无大纲</p>';
-    document.getElementById('textContent').textContent = '暂无内容，点击「视频转录」开始';
+    document.getElementById('textContent').textContent = `暂无内容，点击「${transcribeLabel}」开始`;
 
-    try {
-        const pathForUrl = path.replace(/\\/g, '/');
-        const videoUrl = `${API_BASE_URL}/api/video/${encodeURIComponent(pathForUrl)}`;
-        document.querySelector('#videoPlayer video').src = videoUrl;
-    } catch (e) {}
+    // 切换播放器：视频用 <video>，音频用 <audio>
+    const videoEl = document.querySelector('#videoPlayer video');
+    const audioEl = document.getElementById('audioPlayer');
+    if (isAudio) {
+        if (videoEl) videoEl.style.display = 'none';
+        if (audioEl) {
+            audioEl.style.display = 'block';
+            const pathForUrl = path.replace(/\\/g, '/');
+            audioEl.src = `${API_BASE_URL}/api/video/${encodeURIComponent(pathForUrl)}?media_type=audio`;
+        }
+        // 音频文件按"音频转录"命名按钮
+        const btnAnalyze = document.getElementById('btnAnalyze');
+        if (btnAnalyze) {
+            const lastSpan = btnAnalyze.querySelector('span') || btnAnalyze;
+            // 直接修改文本（保留 SVG）
+            const textNode = Array.from(btnAnalyze.childNodes).find(n => n.nodeType === Node.TEXT_NODE && n.textContent.trim());
+            if (textNode) {
+                textNode.textContent = '音频转录';
+            } else {
+                // 简单替换：直接覆盖按钮的最后一个文本
+                btnAnalyze.innerHTML = btnAnalyze.innerHTML.replace('视频转录', '音频转录');
+            }
+        }
+    } else {
+        if (audioEl) {
+            audioEl.pause();
+            audioEl.removeAttribute('src');
+            audioEl.style.display = 'none';
+        }
+        if (videoEl) {
+            videoEl.style.display = 'block';
+            try {
+                const pathForUrl = path.replace(/\\/g, '/');
+                const videoUrl = `${API_BASE_URL}/api/video/${encodeURIComponent(pathForUrl)}?media_type=video`;
+                videoEl.src = videoUrl;
+            } catch (e) {}
+        }
+        const btnAnalyze = document.getElementById('btnAnalyze');
+        if (btnAnalyze) {
+            const textNode = Array.from(btnAnalyze.childNodes).find(n => n.nodeType === Node.TEXT_NODE && n.textContent.trim());
+            if (textNode) {
+                textNode.textContent = '视频转录';
+            } else {
+                btnAnalyze.innerHTML = btnAnalyze.innerHTML.replace('音频转录', '视频转录');
+            }
+        }
+    }
 
     await loadAnalysisResults(path);
 }
@@ -1616,12 +1934,13 @@ async function openVideoDetail(path) {
 async function loadAnalysisResults(videoPath) {
     const videoFullPath = videoPath;
     const baseName = videoFullPath.replace(/\.[^/.]+$/, '');
+    const mediaType = (currentVideo && currentVideo.media_type) || (isAudioPath(videoPath) ? 'audio' : 'video');
 
     ['summary', 'notes', 'outline'].forEach(async type => {
         try {
-            const response = await fetch(`${API_BASE_URL}/api/analysis/result?video_path=${encodeURIComponent(videoPath)}&type=${type}`);
+            const response = await fetch(`${API_BASE_URL}/api/analysis/result?video_path=${encodeURIComponent(videoPath)}&type=${type}&media_type=${mediaType}`);
             const data = await response.json();
-            
+
             if (data.success && data.content) {
                 const el = document.getElementById(type + 'Content');
                 if (el) {
@@ -1642,9 +1961,9 @@ async function loadAnalysisResults(videoPath) {
 
     // 处理原文（subtitle），直接显示文本
     try {
-        const response = await fetch(`${API_BASE_URL}/api/analysis/result?video_path=${encodeURIComponent(videoPath)}&type=subtitle`);
+        const response = await fetch(`${API_BASE_URL}/api/analysis/result?video_path=${encodeURIComponent(videoPath)}&type=subtitle&media_type=${mediaType}`);
         const data = await response.json();
-        
+
         if (data.success && data.content) {
             const el = document.getElementById('textContent');
             if (el) {
@@ -1674,7 +1993,7 @@ async function analyzeVideo() {
         progressFill.style.width = '0%';
         progressMessage.textContent = '准备开始...';
         
-        const response = await fetch(`${API_BASE_URL}/api/video/analyze?path=${encodeURIComponent(currentVideo.path)}`, {
+        const response = await fetch(`${API_BASE_URL}/api/video/analyze?path=${encodeURIComponent(currentVideo.path)}&media_type=${currentVideo.media_type || 'video'}`, {
             method: 'POST'
         });
         const data = await response.json();
@@ -1759,7 +2078,7 @@ async function generateSummary() {
     btn.disabled = true;
 
     try {
-        const payload = { video_path: currentVideo.path };
+        const payload = { video_path: currentVideo.path, media_type: currentVideo.media_type || 'video' };
         if (appConfig.currentModel) {
             payload.model = appConfig.currentModel;
         }
@@ -1805,7 +2124,7 @@ async function generateNotes() {
     btn.disabled = true;
 
     try {
-        const payload = { video_path: currentVideo.path };
+        const payload = { video_path: currentVideo.path, media_type: currentVideo.media_type || 'video' };
         if (appConfig.currentModel) {
             payload.model = appConfig.currentModel;
         }
@@ -1851,7 +2170,7 @@ async function generateOutline() {
     btn.disabled = true;
 
     try {
-        const payload = { video_path: currentVideo.path };
+        const payload = { video_path: currentVideo.path, media_type: currentVideo.media_type || 'video' };
         if (appConfig.currentModel) {
             payload.model = appConfig.currentModel;
         }
@@ -1890,6 +2209,33 @@ async function generateOutline() {
 // ============================
 // File Operations
 // ============================
+// 根据被操作的项的旧路径与新路径，更新当前路径（如果当前路径等于被操作项，或在被操作项之下）
+function computePathAfterOperation(oldItemPath, newItemPath) {
+    const isAudio = isShowingAudio;
+    const current = isAudio ? currentAudioPath : currentPath;
+    if (!current || !oldItemPath) return current;
+    const oldPrefix = oldItemPath.endsWith('/') ? oldItemPath : oldItemPath + '/';
+    if (current === oldItemPath) {
+        return newItemPath || '';
+    }
+    if (current.startsWith(oldPrefix)) {
+        const suffix = current.slice(oldPrefix.length);
+        if (!newItemPath) return suffix;
+        return suffix ? `${newItemPath}/${suffix}` : newItemPath;
+    }
+    return current;
+}
+
+// 同步侧边栏与当前路径状态
+function refreshAfterStructureChange() {
+    if (isShowingAudio) {
+        loadSidebarAudioFolders();
+    } else {
+        loadSidebarVideoFolders();
+    }
+    updateSidebarActiveState();
+}
+
 function renameFileFromCard(path) {
     document.getElementById('renameInput').value = path.split('/').pop();
     document.getElementById('modalRename').dataset.path = path;
@@ -1901,17 +2247,34 @@ async function renameFile() {
     const newName = document.getElementById('renameInput').value.trim();
     if (!path || !newName) return;
 
+    const media_type = isShowingAudio ? 'audio' : 'video';
+
     try {
         const response = await fetch(`${API_BASE_URL}/api/item/rename`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ source_path: path, new_name: newName })
+            body: JSON.stringify({ source_path: path, new_name: newName, media_type })
         });
         const data = await response.json();
 
         if (data.success) {
             document.getElementById('modalRename').classList.remove('show');
-            loadFiles();
+            // 计算被重命名项的新路径（父目录不变，仅替换最后一段）
+            const segments = path.split('/').filter(Boolean);
+            segments[segments.length - 1] = newName;
+            const newItemPath = segments.join('/');
+            const newCurrent = computePathAfterOperation(path, newItemPath);
+            if (isShowingAudio) {
+                currentAudioPath = newCurrent;
+            } else {
+                currentPath = newCurrent;
+            }
+            if (isShowingAudio) {
+                loadAudioFiles();
+            } else {
+                loadFiles();
+            }
+            refreshAfterStructureChange();
         } else {
             alert('重命名失败: ' + data.error);
         }
@@ -1930,17 +2293,33 @@ async function moveFile() {
     const targetDir = document.getElementById('moveTargetDir').value;
     if (!path) return;
 
+    const media_type = isShowingAudio ? 'audio' : 'video';
+
     try {
         const response = await fetch(`${API_BASE_URL}/api/item/move`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ source_path: path, target_dir: targetDir })
+            body: JSON.stringify({ source_path: path, target_dir: targetDir, media_type })
         });
         const data = await response.json();
 
         if (data.success) {
             document.getElementById('modalMove').classList.remove('show');
-            loadFiles();
+            // 计算移动后的新路径
+            const oldName = path.split('/').filter(Boolean).pop() || '';
+            const newItemPath = targetDir ? `${targetDir}/${oldName}` : oldName;
+            const newCurrent = computePathAfterOperation(path, newItemPath);
+            if (isShowingAudio) {
+                currentAudioPath = newCurrent;
+            } else {
+                currentPath = newCurrent;
+            }
+            if (isShowingAudio) {
+                loadAudioFiles();
+            } else {
+                loadFiles();
+            }
+            refreshAfterStructureChange();
         } else {
             alert('移动失败: ' + data.error);
         }
@@ -1949,26 +2328,94 @@ async function moveFile() {
     }
 }
 
-function deleteFileFromCard(path) {
+async function deleteFileFromCard(path) {
     selectedItems = [path];
+    await renderDeleteModal(path);
     document.getElementById('modalDelete').classList.add('show');
+}
+
+async function renderDeleteModal(path) {
+    const modal = document.getElementById('modalDelete');
+    const titleEl = document.getElementById('deleteModalTitle');
+    const descEl = document.getElementById('deleteModalDesc');
+    if (!modal || !titleEl || !descEl) return;
+
+    // 兜底：使用 card 上保存的 data-item-name（如果存在）
+    let itemName = '';
+    try {
+        const card = document.querySelector(
+            `.file-card[data-type][data-path="${CSS.escape(path)}"], .list-item[data-type][data-path="${CSS.escape(path)}"]`
+        );
+        if (card && card.dataset.itemName) itemName = card.dataset.itemName;
+    } catch (e) { /* CSS.escape 在旧浏览器可能不存在，回退到已存在的 name */ }
+    if (!itemName) {
+        // 取路径最后一段作为兜底名称
+        itemName = (path || '').split('/').filter(Boolean).pop() || path || '该项';
+    }
+
+    // 先用兜底文案显示，避免空白
+    titleEl.textContent = '确认删除';
+    descEl.textContent = `确定要删除「${itemName}」吗？此操作不可撤销。`;
+    modal.dataset.path = path;
+    modal.dataset.itemName = itemName;
+    modal.dataset.itemType = '';
+
+    const media_type = isShowingAudio ? 'audio' : 'video';
+    try {
+        const response = await fetch(
+            `${API_BASE_URL}/api/item/count?path=${encodeURIComponent(path)}&media_type=${media_type}`
+        );
+        const data = await response.json();
+        if (!data.success) return; // 保留兜底文案
+
+        const realName = data.name || itemName;
+        modal.dataset.itemName = realName;
+        modal.dataset.itemType = data.type;
+
+        if (data.type === 'directory') {
+            titleEl.textContent = '确认删除文件夹';
+            const count = data.count || 0;
+            descEl.textContent = `将永久删除文件夹「${realName}」及其内的 ${count} 个文件，此操作不可撤销。`;
+        } else {
+            titleEl.textContent = '确认删除文件';
+            descEl.textContent = `将永久删除文件「${realName}」，此操作不可撤销。`;
+        }
+    } catch (error) {
+        console.error('渲染删除弹窗失败:', error);
+        // 保留兜底文案
+    }
 }
 
 async function deleteSelected() {
     if (selectedItems.length === 0) return;
 
+    const media_type = isShowingAudio ? 'audio' : 'video';
+    const path = selectedItems[0];
+
     try {
         const response = await fetch(`${API_BASE_URL}/api/item/delete`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ source_path: selectedItems[0] })
+            body: JSON.stringify({ source_path: path, media_type })
         });
         const data = await response.json();
 
         if (data.success) {
             document.getElementById('modalDelete').classList.remove('show');
             selectedItems = [];
-            loadFiles();
+            if (isShowingAudio) {
+                loadAudioFiles();
+            } else {
+                loadFiles();
+            }
+            // 删除目录时刷新侧边栏
+            if (data.deleted_type === 'directory') {
+                if (isShowingAudio) {
+                    loadSidebarAudioFolders();
+                } else {
+                    loadSidebarVideoFolders();
+                }
+            }
         } else {
             alert('删除失败: ' + data.error);
         }
@@ -2384,38 +2831,11 @@ function bindEvents() {
     // Sidebar menu
     document.querySelectorAll('.menu-item').forEach(item => {
         item.addEventListener('click', (e) => {
-            // 检查是否是视频父菜单（展开/收起）
-            if (item.dataset.action === 'toggle-videos') {
-                e.stopPropagation();
-                const submenu = document.getElementById('videos-submenu');
-                const toggleIcon = item.querySelector('.menu-toggle-icon');
-                if (submenu) {
-                    submenu.classList.toggle('submenu-open');
-                    if (toggleIcon) {
-                        toggleIcon.style.transform = submenu.classList.contains('submenu-open') 
-                            ? 'rotate(0deg)' 
-                            : 'rotate(-90deg)';
-                    }
-                }
+            // 父菜单（展开/收起）由 bindParentMenuToggles 用事件委托统一处理
+            if (item.classList.contains('menu-item-parent')) {
                 return;
             }
-            
-            // 检查是否是文档父菜单（展开/收起）
-            if (item.dataset.action === 'toggle-documents') {
-                e.stopPropagation();
-                const submenu = document.getElementById('documents-submenu');
-                const toggleIcon = item.querySelector('.menu-toggle-icon');
-                if (submenu) {
-                    submenu.classList.toggle('submenu-open');
-                    if (toggleIcon) {
-                        toggleIcon.style.transform = submenu.classList.contains('submenu-open') 
-                            ? 'rotate(0deg)' 
-                            : 'rotate(-90deg)';
-                    }
-                }
-                return;
-            }
-            
+
             // 检查是否是文档子菜单（有 data-doc-type 属性）
             if (item.dataset.docType !== undefined) {
                 e.stopPropagation();
@@ -2445,8 +2865,11 @@ function bindEvents() {
         });
     });
     
-    // 文档子菜单事件绑定
+    // 视频/音频子菜单事件绑定
     bindSidebarEvents();
+
+    // 父菜单点击（事件委托，处理音频父菜单在部分浏览器不响应的问题）
+    bindParentMenuToggles();
 
     // View toggle
     const viewCardsBtn = document.getElementById('viewCards');
@@ -2458,6 +2881,8 @@ function bindEvents() {
             viewListBtn.classList.remove('active');
             if (isShowingDocuments) {
                 loadDocuments(currentDocType);
+            } else if (isShowingAudio) {
+                loadAudioFiles();
             } else {
                 loadFiles();
             }
@@ -2470,6 +2895,8 @@ function bindEvents() {
             viewCardsBtn.classList.remove('active');
             if (isShowingDocuments) {
                 loadDocuments(currentDocType);
+            } else if (isShowingAudio) {
+                loadAudioFiles();
             } else {
                 loadFiles();
             }
@@ -2482,6 +2909,8 @@ function bindEvents() {
         searchInput.addEventListener('input', debounce(() => {
             if (isShowingDocuments) {
                 loadDocuments(currentDocType);
+            } else if (isShowingAudio) {
+                loadAudioFiles();
             } else {
                 loadFiles();
             }
