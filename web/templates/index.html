@@ -5,6 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI视频分析助手</title>
     <link rel="stylesheet" href="/static/css/main.css?v=20260617b">
+    <link rel="stylesheet" href="/static/css/components/navbar.css">
+    <link rel="stylesheet" href="/static/css/components/sidebar.css">
+    <link rel="stylesheet" href="/static/css/components/cards.css">
+    <link rel="stylesheet" href="/static/css/components/modal.css">
+    <link rel="stylesheet" href="/static/css/components/detail-panel.css">
+    <link rel="stylesheet" href="/static/css/pages/home.css">
+    <link rel="stylesheet" href="/static/css/pages/videos.css">
     <link rel="stylesheet" href="/static/js/pages/knowledge/styles/knowledge.css">
 </head>
 <body>
@@ -367,7 +374,6 @@
                             </div>
                         </div>
 
-
                         <!-- 批量操作工具栏 -->
                         <div class="batch-toolbar" id="batchToolbar" style="display:none;padding:12px 16px;background:#f8fafc;border-bottom:1px solid #e2e8f0;align-items:center;gap:12px">
                             <div style="display:flex;align-items:center;gap:8px">
@@ -405,7 +411,6 @@
                                 任务列表
                             </button>
                         </div>
-
 
                         <div class="content-area" id="contentArea">
                             <div class="loading">
@@ -538,7 +543,6 @@
         </div>
     </div>
 
-
     <div class="modal-overlay" id="modalUpload">
         <div class="modal" style="width:550px">
             <div class="modal-header">
@@ -573,8 +577,6 @@
             </div>
         </div>
     </div>
-
-
 
     <div class="modal-overlay" id="modalUrlUpload">
         <div class="modal" style="width:550px">
@@ -629,7 +631,6 @@
             </div>
         </div>
     </div>
-
 
     <div class="modal-overlay" id="modalDelete">
         <div class="modal">
@@ -1013,10 +1014,7 @@
                     </div>
                 </aside>
 
-
             </div>
-            
-
 
             <!-- 主内容区：聊天区域（向上扩展，占据中间） -->
             <main class="knowledge-main">
@@ -1127,411 +1125,13 @@
 
     <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-    <script src="/static/js/app.js?v=20260617d"></script>
-    <script src="/static/js/pages/knowledge/api.js"></script>
-    <script src="/static/js/pages/knowledge/index.js"></script>
-    
-    <!-- 新增功能脚本 -->
-    <script src="/static/js/pages/knowledge/video_extractor_ui.js"></script>
-    <script>
-        // ============================
-        // 新增功能：头像下拉菜单、设置、访问控制、引导
-        // ============================
-        document.addEventListener('DOMContentLoaded', function() {
-            initUserMenu();
-            initProfileModal();
-            initAccessControl();
-            checkInitialConfig();
-        });
 
-        let currentConfig = {
-            initialized: false,
-            active_provider: 'open-ai',
-            providers: {
-                'open-ai': { name: 'Open AI', api_url: '', api_key: '', default_model: '' },
-                'openroute': { name: 'OpenRoute', api_url: '', api_key: '', default_model: '' },
-                'nvidia': { name: 'NVIDIA', api_url: '', api_key: '', default_model: '' }
-            }
-        };
-
-        function initUserMenu() {
-            // 1) 顶部 user-area 头像下拉菜单
-            const avatarBtn = document.getElementById('avatarBtn');
-            const userDropdown = document.getElementById('userDropdown');
-
-            if (avatarBtn && userDropdown) {
-                avatarBtn.addEventListener('click', function(e) {
-                    e.stopPropagation();
-                    userDropdown.classList.toggle('show');
-                });
-
-                // 点击菜单项
-                document.getElementById('openSettingsModal')?.addEventListener('click', function() {
-                    userDropdown.classList.remove('show');
-                    openSettingsModal();
-                });
-
-                document.getElementById('openProfileModal')?.addEventListener('click', function() {
-                    userDropdown.classList.remove('show');
-                    openProfileModal();
-                });
-            }
-
-            // 2) 侧边栏 sidebar-user 点击弹出下拉菜单（position: fixed，动态计算坐标）
-            const sidebarUser = document.getElementById('sidebarUser');
-            const sidebarUserDropdown = document.getElementById('sidebarUserDropdown');
-
-            // 动态定位下拉菜单：紧挨着 sidebar-user 下方显示
-            function positionSidebarUserDropdown() {
-                if (!sidebarUser || !sidebarUserDropdown) return;
-                const rect = sidebarUser.getBoundingClientRect();
-                // 默认显示在下方
-                let top = rect.bottom + 6;
-                let left = rect.left;
-
-                // 确保菜单不超出右侧视口
-                const dropdownWidth = 200; // 预估宽度，min-width 180 + 边距
-                const viewportWidth = window.innerWidth;
-                if (left + dropdownWidth > viewportWidth - 12) {
-                    left = Math.max(12, viewportWidth - dropdownWidth - 12);
-                }
-
-                // 确保菜单不超出底部视口
-                const dropdownHeight = sidebarUserDropdown.offsetHeight || 120;
-                const viewportHeight = window.innerHeight;
-                if (top + dropdownHeight > viewportHeight - 12) {
-                    // 如果下方空间不够，就显示在上方
-                    const topPosition = rect.top - dropdownHeight - 6;
-                    if (topPosition > 12) {
-                        top = topPosition;
-                    } else {
-                        // 上下都不够，贴紧底部
-                        top = viewportHeight - dropdownHeight - 12;
-                    }
-                }
-
-                sidebarUserDropdown.style.left = left + 'px';
-                sidebarUserDropdown.style.top = top + 'px';
-            }
-
-            if (sidebarUser && sidebarUserDropdown) {
-                sidebarUser.addEventListener('click', function(e) {
-                    e.stopPropagation();
-                    // 关闭其他已打开的下拉菜单
-                    if (userDropdown) userDropdown.classList.remove('show');
-
-                    // 先定位好再切换显示
-                    positionSidebarUserDropdown();
-                    sidebarUserDropdown.classList.toggle('show');
-                    // 显示后重新定位一次（确保尺寸计算准确）
-                    if (sidebarUserDropdown.classList.contains('show')) {
-                        positionSidebarUserDropdown();
-                    }
-                });
-
-                // 菜单项点击
-                sidebarUserDropdown.querySelectorAll('.dropdown-item').forEach(item => {
-                    item.addEventListener('click', function(e) {
-                        e.stopPropagation();
-                        sidebarUserDropdown.classList.remove('show');
-                        const action = item.dataset.action;
-                        if (action === 'settings') {
-                            openSettingsModal();
-                        } else if (action === 'profile') {
-                            openProfileModal();
-                        }
-                    });
-                });
-
-                // 窗口滚动或缩放时，重新定位菜单
-                window.addEventListener('resize', function() {
-                    if (sidebarUserDropdown.classList.contains('show')) {
-                        positionSidebarUserDropdown();
-                    }
-                });
-                window.addEventListener('scroll', function() {
-                    if (sidebarUserDropdown.classList.contains('show')) {
-                        positionSidebarUserDropdown();
-                    }
-                }, true);
-            }
-
-            // 点击页面其他地方关闭所有下拉菜单
-            document.addEventListener('click', function() {
-                if (userDropdown) userDropdown.classList.remove('show');
-                if (sidebarUserDropdown) sidebarUserDropdown.classList.remove('show');
-            });
-        }
-
-
-        // ============================
-        // 个人中心弹窗
-        // ============================
-        function initProfileModal() {
-            document.getElementById('closeProfile')?.addEventListener('click', function() {
-                document.getElementById('modalProfile').classList.remove('show');
-            });
-        }
-
-        function openProfileModal() {
-            document.getElementById('modalProfile').classList.add('show');
-            updateProfileDisplay();
-        }
-
-        function updateProfileDisplay() {
-            const provider = currentConfig.providers[currentConfig.active_provider];
-            const profileProvider = document.getElementById('profileProvider');
-            const profileModel = document.getElementById('profileModel');
-            const profileStatus = document.getElementById('profileStatus');
-            if (profileProvider) profileProvider.textContent = provider?.name || '未设置';
-            if (profileModel) profileModel.textContent = provider?.default_model || '未设置';
-            if (profileStatus) profileStatus.textContent = currentConfig.initialized ? '已配置' : '未配置';
-        }
-
-        // ============================
-        // 访问控制
-        // ============================
-        function initAccessControl() {
-            document.querySelectorAll('[data-page]').forEach(btn => {
-                const page = btn.dataset.page;
-                if (page === 'videos' || page === 'knowledge') {
-                    btn.addEventListener('click', async function(e) {
-                        if (!await checkApiConfig()) {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            showAccessDeniedModal();
-                            return false;
-                        }
-                    });
-                }
-            });
-
-            document.getElementById('goToSettings')?.addEventListener('click', function() {
-                document.getElementById('modalAccessDenied').classList.remove('show');
-                openSettingsModal();
-            });
-
-            document.getElementById('cancelAccessDenied')?.addEventListener('click', function() {
-                document.getElementById('modalAccessDenied').classList.remove('show');
-            });
-        }
-
-        async function checkApiConfig() {
-            try {
-                const response = await fetch('/api/config/status');
-                const data = await response.json();
-                if (data.success) {
-                    currentConfig.initialized = data.initialized;
-                    return data.api_configured;
-                }
-            } catch (e) {
-                console.error('Check config failed:', e);
-            }
-            return false;
-        }
-
-        function showAccessDeniedModal() {
-            document.getElementById('modalAccessDenied').classList.add('show');
-        }
-
-        // ============================
-        // 初始化引导
-        // ============================
-        async function checkInitialConfig() {
-            try {
-                const response = await fetch('/api/config/status');
-                const data = await response.json();
-                if (data.success && !data.initialized) {
-                    showWelcomeModal();
-                }
-            } catch (e) {
-                console.error('Check initial config failed:', e);
-            }
-        }
-
-        let welcomeStep = 0;
-        const totalSteps = 4;
-
-        function showWelcomeModal() {
-            const modal = document.getElementById('modalWelcome');
-            if (modal) modal.classList.add('show');
-            welcomeStep = 1;
-            renderWelcomeStep();
-        }
-
-        function renderWelcomeStep() {
-            const body = document.getElementById('welcomeBody');
-            const footer = document.getElementById('welcomeFooter');
-            if (!body || !footer) return;
-            
-            let bodyHtml = '';
-            let footerHtml = '';
-
-            // 步骤指示器
-            let stepsHtml = '<div class="welcome-progress">';
-            for (let i = 1; i <= totalSteps; i++) {
-                let cls = '';
-                if (i < welcomeStep) cls = 'completed';
-                if (i === welcomeStep) cls = 'active';
-                stepsHtml += `<div class="welcome-progress-dot ${cls}"></div>`;
-            }
-            stepsHtml += '</div>';
-
-            switch (welcomeStep) {
-                case 1:
-                    bodyHtml = `
-                        ${stepsHtml}
-                        <div class="welcome-step">
-                            <div class="welcome-step-icon">🎉</div>
-                            <h2 class="welcome-step-title">欢迎使用 VideoMind</h2>
-                            <p class="welcome-step-desc">这是一个强大的 AI 视频分析助手，让我们开始设置吧！</p>
-                        </div>
-                    `;
-                    footerHtml = `
-                        <button class="btn btn-secondary" onclick="skipWelcomeSetup()">跳过</button>
-                        <button class="btn btn-primary" onclick="nextWelcomeStep()">下一步</button>
-                    `;
-                    break;
-                case 2:
-                    bodyHtml = `
-                        ${stepsHtml}
-                        <div class="welcome-step">
-                            <div class="welcome-step-icon">⚙️</div>
-                            <h2 class="welcome-step-title">选择 API 提供商</h2>
-                            <p class="welcome-step-desc">选择你想使用的 AI 服务提供商</p>
-                            <div class="welcome-step-form">
-                                <select id="welcomeProviderSelect" style="width:100%;padding:12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;">
-                                    <option value="free-ai">Open AI (默认，已配置)</option>
-                                    <option value="openroute">OpenRoute</option>
-                                    <option value="nvidia">NVIDIA</option>
-                                </select>
-                            </div>
-                        </div>
-                    `;
-                    footerHtml = `
-                        <button class="btn btn-secondary" onclick="prevWelcomeStep()">上一步</button>
-                        <button class="btn btn-primary" onclick="nextWelcomeStep()">下一步</button>
-                    `;
-                    break;
-                case 3:
-                    bodyHtml = `
-                        ${stepsHtml}
-                        <div class="welcome-step">
-                            <div class="welcome-step-icon">🔑</div>
-                            <h2 class="welcome-step-title">配置 API</h2>
-                            <p class="welcome-step-desc">输入你的 API 地址和密钥</p>
-                            <div class="welcome-step-form" style="text-align:left;">
-                                <div style="margin-bottom:12px;">
-                                    <label style="display:block;margin-bottom:6px;font-size:14px;font-weight:500;">API 地址</label>
-                                    <input type="text" id="welcomeApiUrl" placeholder="https://api.example.com/v1" style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;">
-                                </div>
-                                <div>
-                                    <label style="display:block;margin-bottom:6px;font-size:14px;font-weight:500;">API Key</label>
-                                    <input type="password" id="welcomeApiKey" placeholder="sk-..." style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;">
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                    footerHtml = `
-                        <button class="btn btn-secondary" onclick="prevWelcomeStep()">上一步</button>
-                        <button class="btn btn-primary" onclick="nextWelcomeStep()">下一步</button>
-                    `;
-                    break;
-                case 4:
-                    bodyHtml = `
-                        ${stepsHtml}
-                        <div class="welcome-step">
-                            <div class="welcome-step-icon">✨</div>
-                            <h2 class="welcome-step-title">完成设置</h2>
-                            <p class="welcome-step-desc">恭喜！你已完成基本设置，现在可以开始使用了。</p>
-                        </div>
-                    `;
-                    footerHtml = `
-                        <button class="btn btn-secondary" onclick="prevWelcomeStep()">上一步</button>
-                        <button class="btn btn-primary" onclick="finishWelcomeSetup()">开始使用</button>
-                    `;
-                    break;
-            }
-
-            body.innerHTML = bodyHtml;
-            footer.innerHTML = footerHtml;
-
-            // 预填充表单
-            if (welcomeStep === 3) {
-                const providerSelect = document.getElementById('welcomeProviderSelect');
-                const selectedProvider = providerSelect ? providerSelect.value : 'free-ai';
-                const provider = currentConfig.providers[selectedProvider];
-                if (provider) {
-                    const urlInput = document.getElementById('welcomeApiUrl');
-                    const keyInput = document.getElementById('welcomeApiKey');
-                    if (urlInput) urlInput.value = provider.api_url || '';
-                    if (keyInput) keyInput.value = provider.api_key || '';
-                }
-            }
-        }
-
-        function nextWelcomeStep() {
-            if (welcomeStep < totalSteps) {
-                welcomeStep++;
-                renderWelcomeStep();
-            }
-        }
-
-        function prevWelcomeStep() {
-            if (welcomeStep > 1) {
-                welcomeStep--;
-                renderWelcomeStep();
-            }
-        }
-
-        async function finishWelcomeSetup() {
-            // 保存配置
-            const providerSelect = document.getElementById('welcomeProviderSelect');
-            const selectedProvider = providerSelect ? providerSelect.value : 'free-ai';
-            
-            if (welcomeStep >= 3) {
-                const urlInput = document.getElementById('welcomeApiUrl');
-                const keyInput = document.getElementById('welcomeApiKey');
-                if (urlInput && keyInput) {
-                    currentConfig.providers[selectedProvider].api_url = urlInput.value;
-                    currentConfig.providers[selectedProvider].api_key = keyInput.value;
-                }
-            }
-            
-            currentConfig.active_provider = selectedProvider;
-            
-            try {
-                await fetch('/api/config/save', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        providers: currentConfig.providers,
-                        active_provider: selectedProvider,
-                        set_initialized: true
-                    })
-                });
-            } catch (e) {
-                console.error('Save config failed:', e);
-            }
-
-            currentConfig.initialized = true;
-            document.getElementById('modalWelcome').classList.remove('show');
-            updateModelDisplay();
-        }
-
-        function skipWelcomeSetup() {
-            document.getElementById('modalWelcome').classList.remove('show');
-        }
-
-        // 辅助：更新模型显示
-        function updateModelDisplay() {
-            const provider = currentConfig.providers[currentConfig.active_provider];
-            const modelNameEl = document.getElementById('currentModelName');
-            const providerNameEl = document.getElementById('currentProviderName');
-            if (modelNameEl) modelNameEl.textContent = provider?.default_model || '未设置';
-            if (providerNameEl) providerNameEl.textContent = provider?.name || '未设置';
-        }
-    </script>
+    <!-- ES Module 入口：app.js 内部按需 import 其它模块 -->
+    <script type="module" src="/static/js/app.js?v=20260617e"></script>
+    <!-- Knowledge API 由 app.js 内的 initKnowledgeApp 触发，单独 script 加载以确保 window.KnowledgeAPI 就绪 -->
+    <script src="/static/js/pages/knowledge/api.js?v=20260617e"></script>
+    <!-- 知识库 UI 子工具（保持原 script 顺序以兼容现有交互） -->
+    <script src="/static/js/pages/knowledge/video_extractor_ui.js?v=20260617e"></script>
 
     <!-- 侧边栏 sidebar-user 下拉菜单（position: fixed 避免被 overflow 容器裁剪） -->
     <div class="user-dropdown sidebar-user-dropdown" id="sidebarUserDropdown">

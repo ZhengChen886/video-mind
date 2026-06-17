@@ -1,0 +1,676 @@
+/* ============================
+   pages/videos.css
+   职责：视频页内容区
+   （video-content-area / top-bar / path-nav / toolbar / view-toggle / search / content-area / batch / tasks / url / download）
+   ============================ */
+
+/* Content Area */
+.video-content-area {
+    flex: 1;
+    min-width: 0;
+}
+
+.top-bar {
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border: 1px solid var(--border-color);
+}
+
+.path-nav {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+.top-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.toolbar {
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border: 1px solid var(--border-color);
+}
+
+.view-toggle {
+    display: flex;
+    gap: 4px;
+}
+
+.view-btn {
+    padding: 6px 12px;
+    border: 1px solid var(--border-color);
+    background: white;
+    cursor: pointer;
+    border-radius: 6px;
+}
+
+.view-btn.active {
+    background: var(--bg-color);
+    border-color: var(--border-color);
+}
+
+.search-box {
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 14px;
+    width: 240px;
+}
+
+.content-area {
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 20px;
+    border: 1px solid var(--border-color);
+    min-height: 400px;
+}
+
+/* ============================
+   Batch Toolbar Styles
+   ============================ */
+.batch-toolbar {
+    background: #eff6ff;
+    border-radius: 8px;
+    margin-bottom: 16px;
+}
+
+.batch-toolbar .btn-sm {
+    padding: 6px 12px;
+    font-size: 13px;
+}
+
+/* ============================
+   Task List Styles
+   ============================ */
+#modalTasks .modal {
+    max-width: 700px;
+}
+
+#tasksList {
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+/* ============================
+   URL Download List Styles
+   ============================ */
+.url-list-container {
+    margin-top: 16px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.url-list-header {
+    padding: 10px 16px;
+    background: var(--bg-color);
+    border-bottom: 1px solid var(--border-color);
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text-primary);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.url-list-item {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    transition: background-color 0.15s;
+}
+
+.url-list-item:hover {
+    background: var(--bg-color);
+}
+
+.url-list-item:last-child {
+    border-bottom: none;
+}
+
+.url-item-index {
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-size: 14px;
+    min-width: 24px;
+}
+
+.url-item-main {
+    flex: 1;
+    min-width: 0;
+}
+
+.url-item-filename {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.url-item-filename input {
+    flex: 1;
+    padding: 6px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 13px;
+    background: white;
+    transition: border-color 0.15s;
+}
+
+.url-item-filename input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+.url-item-url {
+    font-size: 12px;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.url-item-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.url-item-btn {
+    padding: 4px 8px;
+    border: 1px solid var(--border-color);
+    background: white;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text-secondary);
+    transition: all 0.15s;
+}
+
+.url-item-btn:hover {
+    background: var(--bg-color);
+    color: var(--text-primary);
+}
+
+.url-item-btn.danger {
+    color: var(--danger-color);
+    border-color: #fecaca;
+}
+
+.url-item-btn.danger:hover {
+    background: #fef2f2;
+}
+
+/* ============================
+   Download Progress Styles
+   ============================ */
+.download-progress-container {
+    margin-top: 16px;
+}
+
+.download-progress-header {
+    padding: 10px 0;
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text-primary);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.download-progress-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.download-item {
+    padding: 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: white;
+}
+
+.download-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.download-item-name {
+    font-weight: 500;
+    font-size: 14px;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.download-item-status {
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-weight: 500;
+}
+
+.download-item-status.pending {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.download-item-status.downloading {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.download-item-status.completed {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.download-item-status.failed {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.download-progress-bar-container {
+    height: 8px;
+    background: var(--border-color);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 6px;
+}
+
+.download-progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary-color), #8b5cf6);
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+.download-item-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.download-item-speed {
+    display: flex;
+    gap: 12px;
+}
+
+.download-item-error {
+    margin-top: 8px;
+    padding: 8px 12px;
+    background: #fef2f2;
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--danger-color);
+}
+
+/* ============================
+   TTS Panel Styles
+   ============================ */
+.tts-panel {
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+    border: 1px solid var(--border-color);
+}
+
+.tts-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.tts-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.tts-voice-select {
+    padding: 6px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 13px;
+    background: white;
+    cursor: pointer;
+    min-width: 200px;
+}
+
+.tts-voice-select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+.tts-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.tts-btn {
+    padding: 8px 16px;
+    border: 1px solid var(--border-color);
+    background: white;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s;
+}
+
+.tts-btn:hover:not(:disabled) {
+    background: var(--bg-color);
+    border-color: var(--primary-color);
+}
+
+.tts-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.tts-btn.primary {
+    background: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+}
+
+.tts-btn.primary:hover:not(:disabled) {
+    background: var(--primary-hover);
+}
+
+.tts-progress-container {
+    flex: 1;
+}
+
+.tts-progress {
+    width: 100%;
+    height: 6px;
+    background: var(--border-color);
+    border-radius: 3px;
+    overflow: hidden;
+    cursor: pointer;
+}
+
+.tts-progress-fill {
+    height: 100%;
+    background: var(--primary-color);
+    border-radius: 3px;
+    transition: width 0.1s linear;
+}
+
+.tts-time {
+    font-size: 12px;
+    color: var(--text-muted);
+    min-width: 80px;
+    text-align: right;
+}
+
+/* ============================
+   Icon Button Styles
+   ============================ */
+.btn-icon {
+    width: 36px;
+    height: 36px;
+    padding: 6px;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border: 1px solid var(--border-color);
+    background: white;
+    transition: all 0.2s;
+}
+
+.btn-icon:hover:not(:disabled) {
+    background: var(--bg-color);
+    border-color: var(--primary-color);
+}
+
+.btn-icon:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-icon svg {
+    width: 18px;
+    height: 18px;
+    stroke-width: 2;
+}
+
+/* Message TTS Controls */
+.message-tts-controls {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-color);
+}
+
+.message-tts-controls .btn-icon {
+    width: 32px;
+    height: 32px;
+    padding: 4px;
+}
+
+/* Chat Model Selector */
+.chat-model-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 14px;
+    background: #ffffff;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    font-size: 14px;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    min-width: 180px;
+    max-width: 360px;
+}
+
+.chat-model-button:hover {
+    border-color: var(--primary-color);
+    box-shadow: var(--shadow-sm);
+}
+
+.chat-model-menu {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 0;
+    min-width: 320px;
+    max-width: 420px;
+    max-height: 360px;
+    overflow-y: auto;
+    background: #ffffff;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: var(--shadow-lg);
+    padding: 6px;
+    z-index: 100;
+}
+
+.chat-model-menu-item {
+    padding: 10px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    transition: background-color 0.12s ease;
+}
+
+.chat-model-menu-item:hover {
+    background-color: #f1f5f9;
+}
+
+.chat-model-menu-item.active {
+    background-color: #eff6ff;
+}
+
+.chat-model-menu-item.active .chat-model-menu-title {
+    color: var(--primary-color);
+}
+
+.chat-model-menu-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.3;
+    flex: 1;
+}
+
+.chat-model-menu-desc {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+    line-height: 1.4;
+}
+
+.chat-model-menu-check {
+    color: var(--primary-color);
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.chat-model-menu-empty {
+    padding: 16px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    text-align: center;
+}
+
+/* ============================
+   欢迎弹窗样式（保留 home 关联的弹窗样式）
+   ============================ */
+#modalWelcome .modal {
+    max-width: 520px;
+}
+
+.welcome-step {
+    text-align: center;
+}
+
+.welcome-step-icon {
+    width: 72px;
+    height: 72px;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 20px;
+    font-size: 36px;
+    color: white;
+}
+
+.welcome-step-title {
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 12px;
+    color: var(--text-primary);
+}
+
+.welcome-step-desc {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-bottom: 24px;
+    line-height: 1.6;
+}
+
+.welcome-step-form {
+    text-align: left;
+    margin-bottom: 8px;
+}
+
+.welcome-progress {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 20px;
+}
+
+.welcome-progress-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--border-color);
+    transition: all 0.3s;
+}
+
+.welcome-progress-dot.active {
+    background: var(--primary-color);
+    width: 24px;
+    border-radius: 4px;
+}
+
+.welcome-progress-dot.completed {
+    background: var(--success-color);
+}
+
+/* ============================
+   知识库页面样式（kb-* 旧命名）
+   ============================ */
+.kb-page-layout {
+    display: flex;
+    gap: 24px;
+    min-height: calc(100vh - 150px);
+}
+
+.kb-content-area {
+    flex: 1;
+    min-width: 0;
+}
+
+.kb-empty-state {
+    text-align: center;
+    padding: 80px 20px;
+}
+
+.kb-empty-state svg {
+    width: 96px;
+    height: 96px;
+    color: var(--border-color);
+    margin-bottom: 20px;
+}
+
+.kb-empty-state h3 {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 12px;
+}
+
+.kb-empty-state p {
+    color: var(--text-secondary);
+    margin-bottom: 24px;
+}

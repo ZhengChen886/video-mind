@@ -1,0 +1,256 @@
+// ============================
+// pages/knowledge/chat.js
+// 职责：知识库聊天（发送/接收消息、对话加载、模型选择）
+// 内部仍依赖 KnowledgeAPI（来自 api.js）
+// ============================
+import { showToast } from '../../core/utils.js';
+
+let _api = null;
+let _state = null;
+let _ctx = {};
+
+function setCtx({ api, state, ctx }) { _api = api; _state = state; _ctx = ctx || {}; }
+
+function escapeHtml(s) {
+    if (s == null) return '';
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function markdownToHtml(text) {
+    if (!text) return '';
+    try {
+        if (typeof marked !== 'undefined' && marked.parse) {
+            return marked.parse(text);
+        }
+        return text
+            .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+            .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+            .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.+?)\*/g, '<em>$1</em>')
+            .replace(/`(.+?)`/g, '<code>$1</code>')
+            .replace(/\n/g, '<br>');
+    } catch (e) {
+        console.error('Markdown parse error:', e);
+        return text.replace(/\n/g, '<br>');
+    }
+}
+
+export async function sendMessage() {
+    const input = document.getElementById('chat-input');
+    if (!input || !input.value.trim()) return;
+    if (!_state.currentDoc) {
+        showToast('请先选择文档', 'warning');
+        return;
+    }
+    const question = input.value.trim();
+    input.value = '';
+    addMessage('user', question);
+    try {
+        showTypingIndicator();
+        const historyBeforeAdd = _state.messages.slice(0, -1);
+        const currentConvId = _state.currentConversation?.id;
+        const modelToUse = _state.selectedModel;
+        const response = await _api.chat(
+            _state.currentDoc.path,
+            question,
+            historyBeforeAdd.slice(-20),
+            modelToUse,
+            currentConvId
+        );
+        hideTypingIndicator();
+        if (response.success) {
+            addMessage('assistant', response.data.answer);
+            if (response.data.conv_id && (!_state.currentConversation || _state.currentConversation.id !== response.data.conv_id)) {
+                const convResponse = await _api.getConversation(response.data.conv_id);
+                if (convResponse.success && convResponse.data) {
+                    _state.currentConversation = convResponse.data;
+                }
+            }
+            const { loadConversations } = await import('./sidebar.js');
+            await loadConversations();
+        } else {
+            addMessage('assistant', `错误: ${response.error}`);
+        }
+    } catch (error) {
+        hideTypingIndicator();
+        addMessage('assistant', `请求失败: ${error.message}`);
+    }
+}
+
+export function addMessage(role, content) {
+    _state.messages.push({ role, content });
+    renderChatMessages();
+}
+
+export function renderChatMessages() {
+    const container = document.getElementById('chat-messages');
+    if (!container) return;
+    if (_state.messages.length === 0) {
+        container.innerHTML = `<div class="empty-hint">${_state.currentDoc ? '开始提问吧！' : '请先在左侧选择一个文档'}</div>`;
+        return;
+    }
+    let html = '';
+    _state.messages.forEach((msg, index) => {
+        let contentHtml;
+        let contentClass;
+        if (msg.role === 'assistant') {
+            contentHtml = markdownToHtml(msg.content);
+            contentClass = 'message-content markdown-body';
+        } else {
+            contentHtml = escapeHtml(msg.content);
+            contentClass = 'message-content';
+        }
+        html += `<div class="chat-message ${msg.role}" data-content="${escapeHtml(msg.content)}" data-index="${index}">`;
+        if (msg.role === 'assistant') {
+            html += `<div class="message-actions">
+                    <button class="btn-favorite" title="收藏">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+                        </svg>
+                    </button>
+                </div>`;
+        }
+        html += `<div class="${contentClass}">${contentHtml}</div>`;
+        if (msg.role === 'assistant') {
+            const isCurrentlyPlaying = _state.ttsIsPlaying && _state.ttsPlayingIndex === index;
+            const isPaused = _state.ttsIsPaused && _state.ttsPlayingIndex === index;
+            html += `<div class="message-tts-controls">
+                        <button class="btn-icon btn-tts-message-play" data-message-index="${index}" title="播放" style="${isCurrentlyPlaying ? 'display:none' : 'inline-flex'}">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="5 3 19 12 5 21 5 3"/>
+                            </svg>
+                        </button>
+                        <button class="btn-icon btn-tts-message-pause" data-message-index="${index}" title="暂停" style="${(isCurrentlyPlaying && !isPaused) ? 'inline-flex' : 'display:none'}">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="6" y="4" width="4" height="16"/>
+                                <rect x="14" y="4" width="4" height="16"/>
+                            </svg>
+                        </button>
+                        <button class="btn-icon btn-tts-message-stop" data-message-index="${index}" title="停止">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="3" width="18" height="18"/>
+                            </svg>
+                        </button>
+                    </div>`;
+        }
+        html += '</div>';
+    });
+    container.innerHTML = html;
+    container.scrollTop = container.scrollHeight;
+}
+
+export function showTypingIndicator() {
+    const container = document.getElementById('chat-messages');
+    if (!container) return;
+    const indicator = document.createElement('div');
+    indicator.className = 'chat-message assistant typing';
+    indicator.id = 'typing-indicator';
+    indicator.innerHTML = '<div class="message-content"><span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span></div>';
+    container.appendChild(indicator);
+    container.scrollTop = container.scrollHeight;
+}
+
+export function hideTypingIndicator() {
+    const indicator = document.getElementById('typing-indicator');
+    if (indicator) indicator.remove();
+}
+
+export async function loadModels() {
+    try {
+        const response = await _api.getModels();
+        if (response.success) {
+            _state.availableModels = response.models || [];
+            renderModelSelect();
+        }
+    } catch (error) {
+        console.error('加载模型列表失败:', error);
+    }
+}
+
+export function renderModelSelect() {
+    const menu = document.getElementById('chat-model-menu');
+    if (!menu) return;
+    const models = _state.availableModels || [];
+    let html = `
+        <div class="chat-model-menu-item ${!_state.selectedModel ? 'active' : ''}" data-model-id="">
+            <div>
+                <div class="chat-model-menu-title">使用默认模型</div>
+                <div class="chat-model-menu-desc">使用当前激活提供商的默认模型</div>
+            </div>
+            ${!_state.selectedModel ? '<svg class="chat-model-menu-check" viewBox="0 0 24 24" style="width:16px;height:16px" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
+        </div>`;
+    if (models.length === 0) {
+        html += `<div class="chat-model-menu-empty">暂无可用模型，请到设置中获取</div>`;
+    } else {
+        models.forEach(model => {
+            const isActive = _state.selectedModel === model.id;
+            const desc = model.owned_by ? `提供方：${model.owned_by}` : '点击切换至该模型';
+            html += `
+                <div class="chat-model-menu-item ${isActive ? 'active' : ''}" data-model-id="${escapeHtml(model.id)}">
+                    <div>
+                        <div class="chat-model-menu-title">${escapeHtml(model.name || model.id)}</div>
+                        <div class="chat-model-menu-desc">${escapeHtml(desc)}</div>
+                    </div>
+                    ${isActive ? '<svg class="chat-model-menu-check" viewBox="0 0 24 24" style="width:16px;height:16px" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
+                </div>`;
+        });
+    }
+    menu.innerHTML = html;
+    updateModelButtonText();
+}
+
+export function updateModelButtonText() {
+    const textEl = document.getElementById('chat-model-button-text');
+    if (!textEl) return;
+    if (!_state.selectedModel) {
+        textEl.textContent = '使用默认模型';
+        return;
+    }
+    const model = (_state.availableModels || []).find(m => m.id === _state.selectedModel);
+    textEl.textContent = (model && (model.name || model.id)) || _state.selectedModel;
+}
+
+export async function loadConversation(convId, autoLoadDoc = true) {
+    try {
+        const response = await _api.getConversation(convId);
+        if (response.success) {
+            _state.currentConversation = response.data;
+            _state.messages = response.data.messages || [];
+            renderChatMessages();
+            const { renderConversationList } = await import('./sidebar.js');
+            renderConversationList();
+            if (autoLoadDoc && response.data.doc_id) {
+                const { selectDocument } = await import('./doc_preview.js');
+                await selectDocument(response.data.doc_id);
+            }
+        }
+    } catch (error) {
+        showToast('加载对话失败', 'error');
+    }
+}
+
+export async function newConversation() {
+    try {
+        const response = await _api.newConversation(
+            _state.currentDoc?.path,
+            _state.currentDoc?.name
+        );
+        if (response.success) {
+            _state.currentConversation = response.data;
+            _state.messages = [];
+            renderChatMessages();
+            const { loadConversations } = await import('./sidebar.js');
+            await loadConversations();
+        }
+    } catch (error) {
+        showToast('创建对话失败', 'error');
+    }
+}
+
+export { setCtx as setChatCtx };

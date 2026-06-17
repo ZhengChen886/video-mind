@@ -1,0 +1,274 @@
+/* ============================
+   components/cards.css
+   职责：卡片视图 / 列表视图
+   （cards-view / file-card / card-actions / list-view / list-item）
+   ============================ */
+.cards-view {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 20px;
+}
+
+.file-card {
+    background: var(--card-bg);
+    border-radius: 12px;
+    position: relative;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 1px solid var(--border-color);
+    overflow: visible;
+}
+
+.file-card:hover {
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-2px);
+}
+
+.file-card.selected {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(91, 125, 239, 0.2);
+}
+
+.card-thumbnail-wrapper {
+    width: 100%;
+    border-radius: 12px 12px 0 0;
+    overflow: visible;
+    position: relative;
+}
+
+.card-thumbnail {
+    width: 100%;
+    height: 140px;
+    background: var(--bg-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+    border-radius: 12px 12px 0 0;
+}
+
+.card-thumbnail img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 12px 12px 0 0;
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+}
+
+.card-thumbnail svg {
+    width: 48px;
+    height: 48px;
+    color: var(--text-muted);
+    position: relative;
+    z-index: 0;
+}
+
+.card-thumbnail.video::before {
+    content: '';
+    position: absolute;
+    width: 50px;
+    height: 50px;
+    background: rgba(0, 0, 0, 0.6);
+    border-radius: 50%;
+    z-index: 2;
+    pointer-events: none;
+}
+
+.card-thumbnail.video::after {
+    content: '▶';
+    position: absolute;
+    color: white;
+    font-size: 18px;
+    margin-left: 4px;
+    z-index: 3;
+    pointer-events: none;
+}
+
+.card-actions-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.5);
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: all 0.2s;
+    z-index: 15;
+}
+
+.file-card:hover .card-actions-btn {
+    opacity: 1;
+}
+
+.card-actions-btn:hover {
+    background: rgba(0, 0, 0, 0.8);
+    transform: scale(1.1);
+}
+
+.card-actions-menu {
+    position: absolute;
+    background: white;
+    border-radius: 8px;
+    box-shadow: var(--shadow-lg);
+    padding: 4px 0;
+    min-width: 120px;
+    display: none;
+    z-index: 9999;
+}
+
+.card-actions-menu.show {
+    display: block;
+}
+
+.action-item {
+    width: 100%;
+    padding: 8px 16px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    text-align: left;
+    font-size: 14px;
+    color: var(--text-primary);
+    transition: background-color 0.1s;
+}
+
+.action-item:hover {
+    background: var(--bg-color);
+}
+
+.action-item.danger {
+    color: var(--danger-color);
+}
+
+.card-info {
+    padding: 14px;
+}
+
+.card-name {
+    font-size: 14px;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-bottom: 6px;
+}
+
+.card-meta {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+/* ============================
+   List View
+   ============================ */
+.list-view {
+    background: var(--card-bg);
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    overflow: hidden;
+}
+
+.list-header {
+    display: grid;
+    grid-template-columns: 40px 1fr 120px 120px 100px;
+    padding: 12px 16px;
+    background: var(--bg-color);
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.list-item {
+    display: grid;
+    grid-template-columns: 40px 1fr 120px 120px 100px;
+    padding: 12px 16px;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+    cursor: pointer;
+    transition: background-color 0.1s;
+    position: relative;
+    overflow: visible;
+}
+
+.list-item:hover {
+    background: var(--bg-color);
+}
+
+.list-item.selected {
+    background: rgba(91, 125, 239, 0.08);
+}
+
+.list-item:last-child {
+    border-bottom: none;
+}
+
+.list-icon {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+/* 列表视图操作按钮样式 */
+.list-item .card-actions-btn {
+    position: relative;
+    top: auto;
+    right: auto;
+    width: 28px;
+    height: 28px;
+    background: var(--bg-color);
+    color: var(--text-secondary);
+    opacity: 0;
+}
+
+.list-item:hover .card-actions-btn {
+    opacity: 1;
+}
+
+.list-item .card-actions-btn:hover {
+    background: var(--border-color);
+    color: var(--text-primary);
+    transform: none;
+}
+
+.list-item .card-actions-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 4px;
+}
+
+/* 确保列表项有相对定位，以便操作菜单正确显示 */
+.list-item > div:last-child {
+    position: relative;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.list-icon svg {
+    width: 20px;
+    height: 20px;
+    color: var(--text-secondary);
+}
+
+.list-name {
+    font-size: 14px;
+}
+
+.list-meta {
+    font-size: 12px;
+    color: var(--text-muted);
+}

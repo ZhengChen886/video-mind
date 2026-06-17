@@ -1,0 +1,227 @@
+// ============================
+// pages/video_detail.js
+// 职责：视频/音频详情面板、转录、生成总结/笔记/大纲
+// ============================
+import { API_BASE_URL, appConfig } from '../core/config.js';
+import { state } from '../core/state.js';
+import { simpleMarkdownToHtml } from '../core/utils.js';
+
+export function isAudioPath(path) {
+    if (!path) return false;
+    return /\.(mp3|m4a|wav|flac|ogg|aac)$/i.test(path);
+}
+
+export async function openVideoDetail(path) {
+    const isAudio = isAudioPath(path);
+    state.currentVideo = { path, media_type: isAudio ? 'audio' : 'video' };
+    document.getElementById('detailPanel').classList.add('show');
+    document.getElementById('detailName').textContent = path.split(/[\\/]/).pop();
+    const detailPanelTitle = document.getElementById('detailPanelTitle');
+    if (detailPanelTitle) detailPanelTitle.textContent = isAudio ? '音频详情' : '视频详情';
+    const transcribeLabel = isAudio ? '音频转录' : '视频转录';
+    document.getElementById('summaryContent').innerHTML = `点击「${transcribeLabel}」获取原文，然后生成总结`;
+    document.getElementById('notesContent').innerHTML = '<p>暂无笔记</p>';
+    document.getElementById('outlineContent').innerHTML = '<p>暂无大纲</p>';
+    document.getElementById('textContent').textContent = `暂无内容，点击「${transcribeLabel}」开始`;
+    const videoEl = document.querySelector('#videoPlayer video');
+    const audioEl = document.getElementById('audioPlayer');
+    if (isAudio) {
+        if (videoEl) videoEl.style.display = 'none';
+        if (audioEl) {
+            audioEl.style.display = 'block';
+            const pathForUrl = path.replace(/\\/g, '/');
+            audioEl.src = `${API_BASE_URL}/api/video/${encodeURIComponent(pathForUrl)}?media_type=audio`;
+        }
+        const btnAnalyze = document.getElementById('btnAnalyze');
+        if (btnAnalyze) {
+            const textNode = Array.from(btnAnalyze.childNodes).find(n => n.nodeType === Node.TEXT_NODE && n.textContent.trim());
+            if (textNode) {
+                textNode.textContent = '音频转录';
+            } else {
+                btnAnalyze.innerHTML = btnAnalyze.innerHTML.replace('视频转录', '音频转录');
+            }
+        }
+    } else {
+        if (audioEl) {
+            audioEl.pause();
+            audioEl.removeAttribute('src');
+            audioEl.style.display = 'none';
+        }
+        if (videoEl) {
+            videoEl.style.display = 'block';
+            try {
+                const pathForUrl = path.replace(/\\/g, '/');
+                const videoUrl = `${API_BASE_URL}/api/video/${encodeURIComponent(pathForUrl)}?media_type=video`;
+                videoEl.src = videoUrl;
+            } catch (e) {}
+        }
+        const btnAnalyze = document.getElementById('btnAnalyze');
+        if (btnAnalyze) {
+            const textNode = Array.from(btnAnalyze.childNodes).find(n => n.nodeType === Node.TEXT_NODE && n.textContent.trim());
+            if (textNode) {
+                textNode.textContent = '视频转录';
+            } else {
+                btnAnalyze.innerHTML = btnAnalyze.innerHTML.replace('音频转录', '视频转录');
+            }
+        }
+    }
+    await loadAnalysisResults(path);
+}
+
+export async function loadAnalysisResults(videoPath) {
+    const mediaType = (state.currentVideo && state.currentVideo.media_type) || (isAudioPath(videoPath) ? 'audio' : 'video');
+    ['summary', 'notes', 'outline'].forEach(async type => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/analysis/result?video_path=${encodeURIComponent(videoPath)}&type=${type}&media_type=${mediaType}`);
+            const data = await response.json();
+            if (data.success && data.content) {
+                const el = document.getElementById(type + 'Content');
+                if (el) {
+                    try {
+                        if (typeof marked !== 'undefined' && marked.parse) {
+                            el.innerHTML = marked.parse(data.content);
+                        } else {
+                            el.innerHTML = simpleMarkdownToHtml(data.content);
+                        }
+                    } catch (e) {
+                        el.innerHTML = simpleMarkdownToHtml(data.content);
+                    }
+                }
+            }
+        } catch (e) {}
+    });
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/analysis/result?video_path=${encodeURIComponent(videoPath)}&type=subtitle&media_type=${mediaType}`);
+        const data = await response.json();
+        if (data.success && data.content) {
+            const el = document.getElementById('textContent');
+            if (el) el.textContent = data.content;
+        }
+    } catch (e) {}
+}
+
+export async function analyzeVideo() {
+    if (!state.currentVideo) return;
+    const progressBar = document.getElementById('analyzeProgress');
+    const progressFill = progressBar ? progressBar.querySelector('.progress-fill') : null;
+    const progressMessage = document.getElementById('analyzeProgressMessage');
+    const btn = document.getElementById('btnAnalyze');
+    try {
+        if (progressBar) progressBar.style.display = 'block';
+        if (progressMessage) progressMessage.style.display = 'block';
+        if (btn) btn.disabled = true;
+        if (progressFill) progressFill.style.width = '0%';
+        if (progressMessage) progressMessage.textContent = '准备开始...';
+        const response = await fetch(`${API_BASE_URL}/api/video/analyze?path=${encodeURIComponent(state.currentVideo.path)}&media_type=${state.currentVideo.media_type || 'video'}`, {
+            method: 'POST'
+        });
+        const data = await response.json();
+        if (data.success && data.task_id) {
+            await pollTaskProgress(data.task_id);
+        } else {
+            alert('分析失败: ' + (data.error || '未知错误'));
+            if (progressBar) progressBar.style.display = 'none';
+            if (progressMessage) progressMessage.style.display = 'none';
+            if (btn) btn.disabled = false;
+        }
+    } catch (error) {
+        alert('分析失败: ' + error.message);
+        if (progressBar) progressBar.style.display = 'none';
+        if (progressMessage) progressMessage.style.display = 'none';
+        if (btn) btn.disabled = false;
+    }
+}
+
+export async function pollTaskProgress(taskId) {
+    const progressBar = document.getElementById('analyzeProgress');
+    const progressFill = progressBar ? progressBar.querySelector('.progress-fill') : null;
+    const progressMessage = document.getElementById('analyzeProgressMessage');
+    const btn = document.getElementById('btnAnalyze');
+    let pollInterval;
+    try {
+        pollInterval = setInterval(async () => {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`);
+                const data = await response.json();
+                if (data.success && data.task) {
+                    const task = data.task;
+                    if (progressFill) progressFill.style.width = `${task.progress || 0}%`;
+                    if (progressMessage) progressMessage.textContent = task.message || '处理中...';
+                    if (task.status === 'completed') {
+                        clearInterval(pollInterval);
+                        if (progressBar) progressBar.style.display = 'none';
+                        if (progressMessage) progressMessage.style.display = 'none';
+                        if (btn) btn.disabled = false;
+                        if (task.result && state.currentVideo) {
+                            await loadAnalysisResults(state.currentVideo.path);
+                        }
+                    } else if (task.status === 'failed') {
+                        clearInterval(pollInterval);
+                        if (progressBar) progressBar.style.display = 'none';
+                        if (progressMessage) progressMessage.style.display = 'none';
+                        if (btn) btn.disabled = false;
+                        alert('处理失败: ' + (task.message || '未知错误'));
+                    }
+                }
+            } catch (error) {
+                console.error('查询任务进度失败:', error);
+            }
+        }, 500);
+    } catch (error) {
+        clearInterval(pollInterval);
+        if (progressBar) progressBar.style.display = 'none';
+        if (btn) btn.disabled = false;
+        alert('查询进度失败: ' + error.message);
+    }
+}
+
+async function generateContent(apiPath, contentElId, progressElId, btnElId) {
+    if (!state.currentVideo) return;
+    const progress = document.getElementById(progressElId);
+    const btn = document.getElementById(btnElId);
+    if (progress) progress.classList.add('show');
+    if (btn) btn.disabled = true;
+    try {
+        const payload = { video_path: state.currentVideo.path, media_type: state.currentVideo.media_type || 'video' };
+        if (appConfig.currentModel) payload.model = appConfig.currentModel;
+        const response = await fetch(`${API_BASE_URL}${apiPath}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await response.json();
+        if (data.success) {
+            const el = document.getElementById(contentElId);
+            if (data.content && el) {
+                try {
+                    if (typeof marked !== 'undefined' && marked.parse) {
+                        el.innerHTML = marked.parse(data.content);
+                    } else {
+                        el.innerHTML = simpleMarkdownToHtml(data.content);
+                    }
+                } catch (e) {
+                    el.innerHTML = simpleMarkdownToHtml(data.content);
+                }
+            }
+        } else {
+            alert('生成失败: ' + data.error);
+        }
+    } catch (error) {
+        alert('生成失败: ' + error.message);
+    } finally {
+        if (progress) progress.classList.remove('show');
+        if (btn) btn.disabled = false;
+    }
+}
+
+export async function generateSummary() {
+    return generateContent('/api/analysis/generate-summary', 'summaryContent', 'genSummaryProgress', 'btnGenSummary');
+}
+
+export async function generateNotes() {
+    return generateContent('/api/analysis/generate-notes', 'notesContent', 'genNotesProgress', 'btnGenNotes');
+}
+
+export async function generateOutline() {
+    return generateContent('/api/analysis/generate-outline', 'outlineContent', 'genOutlineProgress', 'btnGenOutline');
+}
