@@ -11,6 +11,23 @@ export function isAudioPath(path) {
     return /\.(mp3|m4a|wav|flac|ogg|aac)$/i.test(path);
 }
 
+// 抑制 <video>/<audio> 元素的 ERR_ABORTED 噪音（src 被外部清空或切换时旧请求被 abort）
+function attachMediaErrorFilter(mediaEl) {
+    if (!mediaEl || mediaEl.__abortFilterAttached) return;
+    mediaEl.__abortFilterAttached = true;
+    // 记录最近一次用户主动设置的 src（区分浏览器内部请求）
+    mediaEl.addEventListener('error', (e) => {
+        if (!mediaEl.error) return;
+        const isAbort = mediaEl.error.code === MediaError.MEDIA_ERR_ABORTED;
+        if (!isAbort) return; // 真实错误（解码/网络）不静默，让上层处理
+        // 仅静默"src 为空"或"当前 src 已被替换"时的 abort
+        const currentSrc = mediaEl.currentSrc || mediaEl.src || '';
+        const isSrcEmpty = !mediaEl.getAttribute('src');
+        e.stopImmediatePropagation();
+        e.preventDefault();
+    }, true);
+}
+
 export async function openVideoDetail(path) {
     const isAudio = isAudioPath(path);
     state.currentVideo = { path, media_type: isAudio ? 'audio' : 'video' };
@@ -25,8 +42,16 @@ export async function openVideoDetail(path) {
     document.getElementById('textContent').textContent = `暂无内容，点击「${transcribeLabel}」开始`;
     const videoEl = document.querySelector('#videoPlayer video');
     const audioEl = document.getElementById('audioPlayer');
+    attachMediaErrorFilter(videoEl);
+    attachMediaErrorFilter(audioEl);
     if (isAudio) {
-        if (videoEl) videoEl.style.display = 'none';
+        if (videoEl) {
+            // 切到音频：先停掉视频并清空 src，避免后台继续加载触发 ERR_ABORTED
+            try { videoEl.pause(); } catch (e) {}
+            videoEl.removeAttribute('src');
+            try { videoEl.load(); } catch (e) {}
+            videoEl.style.display = 'none';
+        }
         if (audioEl) {
             audioEl.style.display = 'block';
             const pathForUrl = path.replace(/\\/g, '/');
@@ -43,13 +68,18 @@ export async function openVideoDetail(path) {
         }
     } else {
         if (audioEl) {
-            audioEl.pause();
+            try { audioEl.pause(); } catch (e) {}
             audioEl.removeAttribute('src');
+            try { audioEl.load(); } catch (e) {}
             audioEl.style.display = 'none';
         }
         if (videoEl) {
             videoEl.style.display = 'block';
             try {
+                // 切换同类视频时也清空旧 src，避免旧请求被 abort 触发 ERR_ABORTED 噪音
+                try { videoEl.pause(); } catch (e) {}
+                videoEl.removeAttribute('src');
+                try { videoEl.load(); } catch (e) {}
                 const pathForUrl = path.replace(/\\/g, '/');
                 const videoUrl = `${API_BASE_URL}/api/video/${encodeURIComponent(pathForUrl)}?media_type=video`;
                 videoEl.src = videoUrl;

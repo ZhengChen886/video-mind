@@ -98,34 +98,54 @@ export async function startTTS(mode = 'doc', messageIndex = null) {
 
 function playTTSAudio(audioUrl) {
     if (_state.ttsAudio) {
-        _state.ttsAudio.pause();
+        try { _state.ttsAudio.pause(); } catch (e) {}
+        // 清空 src 并 load()，避免后台请求被 abort 触发 ERR_ABORTED 噪音
+        try { _state.ttsAudio.removeAttribute('src'); } catch (e) {}
+        try { _state.ttsAudio.load(); } catch (e) {}
         _state.ttsAudio = null;
     }
-    _state.ttsAudio = new Audio(audioUrl);
+    const audioEl = new Audio(audioUrl);
+    _state.ttsAudio = audioEl;
     _state.ttsIsPlaying = true;
     _state.ttsIsPaused = false;
-    _state.ttsAudio.addEventListener('loadedmetadata', () => {
-        _state.ttsDuration = _state.ttsAudio.duration;
-        updateTTSProgress();
+    audioEl.addEventListener('loadedmetadata', () => {
+        // 仅当 audioEl 仍是当前活动音频时更新状态
+        if (_state.ttsAudio === audioEl) {
+            _state.ttsDuration = audioEl.duration;
+            updateTTSProgress();
+        }
     });
-    _state.ttsAudio.addEventListener('timeupdate', () => {
-        _state.ttsCurrentTime = _state.ttsAudio.currentTime;
-        updateTTSProgress();
+    audioEl.addEventListener('timeupdate', () => {
+        // 仅当 audioEl 仍是当前活动音频时更新进度，避免已被替换/停止后读到 null
+        if (_state.ttsAudio === audioEl) {
+            _state.ttsCurrentTime = audioEl.currentTime;
+            updateTTSProgress();
+        }
     });
-    _state.ttsAudio.addEventListener('ended', () => {
-        _state.ttsIsPlaying = false;
-        _state.ttsIsPaused = false;
-        updateTTSControls();
+    audioEl.addEventListener('ended', () => {
+        if (_state.ttsAudio === audioEl) {
+            _state.ttsIsPlaying = false;
+            _state.ttsIsPaused = false;
+            updateTTSControls();
+        }
     });
-    _state.ttsAudio.addEventListener('error', () => {
-        _state.ttsIsPlaying = false;
-        _state.ttsIsPaused = false;
-        updateTTSControls();
-        showToast('音频播放失败', 'error');
+    audioEl.addEventListener('error', (e) => {
+        // 仅当 audioEl 仍是当前活动音频，且不是因为 src 被外部清空导致的 abort
+        const isAbortedEmpty = !audioEl.getAttribute('src') && audioEl.error && audioEl.error.code === MediaError.MEDIA_ERR_ABORTED;
+        if (_state.ttsAudio === audioEl && !isAbortedEmpty) {
+            _state.ttsIsPlaying = false;
+            _state.ttsIsPaused = false;
+            updateTTSControls();
+            showToast('音频播放失败', 'error');
+        }
     });
-    _state.ttsAudio.play().catch(error => {
-        showToast('音频播放失败: ' + error.message, 'error');
-        _state.ttsIsPlaying = false;
+    audioEl.play().catch(error => {
+        // 静默 abort 错误（src 被清空/快速切换触发的正常 abort）
+        if (error && error.name === 'AbortError') return;
+        if (_state.ttsAudio === audioEl) {
+            showToast('音频播放失败: ' + error.message, 'error');
+            _state.ttsIsPlaying = false;
+        }
     });
     updateTTSControls();
 }
@@ -141,8 +161,9 @@ export function pauseTTS() {
 
 export function stopTTS() {
     if (_state.ttsAudio) {
-        _state.ttsAudio.pause();
-        _state.ttsAudio.currentTime = 0;
+        try { _state.ttsAudio.pause(); } catch (e) {}
+        try { _state.ttsAudio.removeAttribute('src'); } catch (e) {}
+        try { _state.ttsAudio.load(); } catch (e) {}
         _state.ttsAudio = null;
     }
     _state.ttsIsPlaying = false;

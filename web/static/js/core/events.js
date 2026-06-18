@@ -8,7 +8,7 @@ import {
     bindSidebarEvents,
     bindParentMenuToggles
 } from '../pages/videos.js';
-import { switchPage, loadFiles, loadAudioFiles, startTasksPolling, stopTasksPolling, clearCompletedTasks, toggleSelectAll, clearSelection, startBatchTranscribe, createFolder, updateSelectedFilesList, uploadFile, uploadByUrl, analyzeVideo, generateSummary, generateNotes, generateOutline, renameFile, moveFile, deleteSelected, renderModelList, confirmModelSelect, fetchModels, addModelRow, saveModelsFromTable, saveSettings, switchProviderTab, openSettingsModal, openModelSelectModal } from '../pages/index-bridge.js';
+import { switchPage, loadFiles, loadAudioFiles, startTasksPolling, stopTasksPolling, clearCompletedTasks, toggleSelectAll, clearSelection, startBatchTranscribe, createFolder, updateSelectedFilesList, uploadFile, uploadByUrl, initUrlUploadInput, analyzeVideo, generateSummary, generateNotes, generateOutline, renameFile, moveFile, deleteSelected, renderModelList, confirmModelSelect, fetchModels, addModelRow, saveModelsFromTable, saveSettings, switchProviderTab, openSettingsModal, openModelSelectModal } from '../pages/index-bridge.js';
 import { debounce } from './utils.js';
 import { state } from './state.js';
 
@@ -122,6 +122,9 @@ export function bindEvents() {
             document.getElementById('modalUrlUpload').classList.add('show');
         });
     }
+
+    // 初始化 URL 链接输入框的 input 事件监听（用于在输入链接后展示待下载列表与重命名框）
+    initUrlUploadInput();
 
     // 任务列表按钮
     const viewTasksBtn = document.getElementById('viewTasksBtn');

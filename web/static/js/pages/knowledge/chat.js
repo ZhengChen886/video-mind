@@ -213,7 +213,13 @@ export function updateModelButtonText() {
         return;
     }
     const model = (_state.availableModels || []).find(m => m.id === _state.selectedModel);
-    textEl.textContent = (model && (model.name || model.id)) || _state.selectedModel;
+    if (model && (model.name || model.id)) {
+        textEl.textContent = model.name || model.id;
+    } else {
+        // 选中的模型在当前列表里找不到（被删除/切换提供商），回退到默认模型显示
+        _state.selectedModel = null;
+        textEl.textContent = '使用默认模型';
+    }
 }
 
 export async function loadConversation(convId, autoLoadDoc = true) {

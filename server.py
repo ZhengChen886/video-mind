@@ -8,8 +8,32 @@ import uvicorn
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.staticfiles import StaticFiles as _BaseStaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.responses import Response
+
+
+# 静态文件服务（带强缓存头，减少首页 ~25 个资源 304 校验的往返开销）
+class CachedStaticFiles(_BaseStaticFiles):
+    """
+    带强缓存头的静态文件服务：
+    - 路径中带 ?v=xxx（版本号查询串）时，返回 Cache-Control: public, max-age=31536000, immutable
+      浏览器不再发 If-Modified-Since / If-None-Match，304 校验彻底省掉
+    - 普通请求走默认行为（短期缓存）
+    注意：max-age=31536000 配合版本号强制刷新（?v=20260618b）使用，不会出现缓存更新问题
+    """
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        if isinstance(response, Response):
+            query_string = scope.get("query_string", b"").decode("latin-1", errors="ignore")
+            if "v=" in query_string:
+                # 带版本号的资源：1 年强缓存 + immutable，浏览器不再发条件请求
+                response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            else:
+                # 普通资源：1 小时缓存，减少重复请求
+                response.headers.setdefault("Cache-Control", "public, max-age=3600")
+        return response
 
 
 # 导入外部模块
@@ -331,11 +355,38 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 静态文件服务
-app.mount("/static", StaticFiles(directory="web/static"), name="static")
+# 静态文件服务（带强缓存头，减少首页 ~25 个资源 304 校验的往返开销）
+app.mount("/static", CachedStaticFiles(directory="web/static"), name="static")
 
 # 模板配置
 templates = Jinja2Templates(directory="web/templates")
+
+# ============================================================
+# 浏览器扩展兼容性：快速响应 Vite HMR 类扩展注入的请求
+# 部分浏览器扩展（Vite DevTools 等）会向页面注入 /@vite/client、/@id/* 等请求
+# 这些请求在 FastAPI 里没有对应路由，会得到 404；扩展会同时发起多个此类请求
+# 占用浏览器同源并发连接（HTTP/1.1 默认 6 个），挤压首页数据 fetch 排队
+# 这里直接返回 204 No Content，让扩展迅速完成请求，不影响正常业务
+# ============================================================
+@app.get("/@vite/{path:path}", status_code=204)
+async def _vite_no_content(path: str):
+    return None
+
+@app.get("/@id/{path:path}", status_code=204)
+async def _vite_id_no_content(path: str):
+    return None
+
+@app.get("/@fs/{path:path}", status_code=204)
+async def _vite_fs_no_content(path: str):
+    return None
+
+@app.get("/__vite_ping", status_code=204)
+async def _vite_ping_no_content():
+    return None
+
+@app.get("/@vite/client", status_code=204)
+async def _vite_client_no_content():
+    return None
 
 # 注册知识库路由
 app.include_router(knowledge_router)

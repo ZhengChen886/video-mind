@@ -10,7 +10,7 @@ import { initUserMenu } from './modal/user_menu.js';
 import { initProfileModal } from './modal/profile.js';
 import { initAccessControl } from './modal/access_control.js';
 import { checkInitialConfig } from './modal/welcome.js';
-import { initKnowledgeApp } from './pages/knowledge/index.js';
+import { initKnowledgeApp } from './pages/knowledge/index.js?v=20260618e';
 import { switchPage } from './pages/index-bridge.js';
 import {
     skipWelcomeSetup,

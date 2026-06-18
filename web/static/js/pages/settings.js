@@ -267,6 +267,10 @@ export async function saveSettings() {
             }
             saveAppConfig();
             updateModelDisplay();
+            // 同步刷新 chat 页的模型列表与按钮文本（避免切换提供商/修改模型后聊天页仍显示旧模型）
+            if (window.knowledgePage && typeof window.knowledgePage.loadModels === 'function') {
+                try { await window.knowledgePage.loadModels(); } catch (e) { console.error('刷新知识库模型列表失败:', e); }
+            }
             const modal = document.getElementById('modalSettings');
             if (modal) modal.classList.remove('show');
             alert('保存成功！');

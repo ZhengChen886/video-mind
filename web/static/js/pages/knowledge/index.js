@@ -202,28 +202,34 @@ const KnowledgeApp = {
             });
         }
 
-        // 模型选择器
-        const modelButton = document.getElementById('chat-model-button');
-        const modelMenu = document.getElementById('chat-model-menu');
-        if (modelButton && modelMenu) {
-            modelButton.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const isOpen = modelMenu.style.display === 'block';
-                modelMenu.style.display = isOpen ? 'none' : 'block';
-            });
+        // 模型选择器 —— 用事件委托只绑一次，避免 init() 被多次调用时 click handler 重复叠加导致 toggle 互相抵消
+        if (!this._modelSelectorBound) {
+            this._modelSelectorBound = true;
+            // 点击事件统一委托到 document 上，避开多次 init 导致的 handler 累积
             document.addEventListener('click', (e) => {
-                if (!modelMenu.contains(e.target) && e.target !== modelButton) {
-                    modelMenu.style.display = 'none';
+                const button = e.target.closest('#chat-model-button');
+                const menu = document.getElementById('chat-model-menu');
+                if (button) {
+                    // 点击按钮：切换菜单
+                    e.stopPropagation();
+                    if (!menu) return;
+                    const isOpen = menu.style.display === 'block';
+                    menu.style.display = isOpen ? 'none' : 'block';
+                    return;
                 }
-            });
-            document.addEventListener('click', (e) => {
-                const item = e.target.closest('.chat-model-menu-item');
-                if (item && modelMenu && modelMenu.contains(item)) {
-                    const modelId = item.dataset.modelId || null;
-                    state.selectedModel = modelId;
-                    Chat.updateModelButtonText();
-                    if (modelMenu) modelMenu.style.display = 'none';
+                if (menu && menu.contains(e.target)) {
+                    // 点击菜单内的 item：选中并关闭
+                    const item = e.target.closest('.chat-model-menu-item');
+                    if (item) {
+                        const modelId = item.dataset.modelId || null;
+                        state.selectedModel = modelId;
+                        Chat.updateModelButtonText();
+                        menu.style.display = 'none';
+                    }
+                    return;
                 }
+                // 点击其他区域：关闭菜单
+                if (menu) menu.style.display = 'none';
             });
         }
     },
