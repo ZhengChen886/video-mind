@@ -46,9 +46,15 @@ export function renderDocumentPreview(doc) {
 }
 
 export async function selectDocument(filePath) {
+    // 早退保护：_state / _api 未注入时直接拒绝
+    if (!_state || !_api) {
+        console.error('[selectDocument] _state / _api 未初始化，跳过');
+        showToast('加载文档失败：知识库未初始化，请刷新页面', 'error');
+        return;
+    }
     try {
         if (_state.ttsIsPlaying || _state.ttsIsPaused) {
-            const { stopTTS } = await import('./tts.js');
+            const { stopTTS } = await import('./tts.js?v=20260618n');
             stopTTS();
             showToast('已停止当前音频播放', 'info');
         }
@@ -58,12 +64,12 @@ export async function selectDocument(filePath) {
             _state.currentDoc = response.data;
             renderDocumentPreview(response.data);
             await checkIndexStatus(filePath);
-            const { loadFiles, renderFileList } = await import('./sidebar.js');
+            const { loadFiles, renderFileList } = await import('./sidebar.js?v=20260618n');
             await loadFiles();
-            const docConversations = _state.conversations.filter(
+            const docConversations = (_state.conversations || []).filter(
                 conv => conv.doc_id === filePath
             );
-            const { loadConversation, renderChatMessages } = await import('./chat.js');
+            const { loadConversation, renderChatMessages } = await import('./chat.js?v=20260618n');
             if (docConversations.length > 0) {
                 const latestConv = docConversations[0];
                 await loadConversation(latestConv.id, false);
@@ -72,7 +78,7 @@ export async function selectDocument(filePath) {
                 _state.messages = [];
                 renderChatMessages();
             }
-            const { renderConversationList } = await import('./sidebar.js');
+            const { renderConversationList } = await import('./sidebar.js?v=20260618n');
             renderConversationList();
         }
     } catch (error) {

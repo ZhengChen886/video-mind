@@ -4,11 +4,11 @@
 // 真正实现拆分到 sidebar.js / chat.js / doc_preview.js / tts.js
 // 保留 window.KnowledgeApp / window.knowledgePage 兼容桥
 // ============================
-import * as Sidebar from './sidebar.js';
-import * as Chat from './chat.js';
-import * as DocPreview from './doc_preview.js';
-import * as TTS from './tts.js';
-import { showToast } from '../../core/utils.js';
+import * as Sidebar from './sidebar.js?v=20260618n';
+import * as Chat from './chat.js?v=20260618n';
+import * as DocPreview from './doc_preview.js?v=20260618n';
+import * as TTS from './tts.js?v=20260618n';
+import { showToast } from '../../core/utils.js?v=20260618n';
 
 const state = {
     currentDoc: null,
@@ -53,6 +53,15 @@ const KnowledgeApp = {
     api: null,
 
     init() {
+        // 幂等保护：避免 switchPage('knowledge') / DOMContentLoaded 多次触发
+        // 导致 init() 内的 Chat.loadModels() / bindEvents() 重复执行
+        if (this._initialized) {
+            // 二次进入只刷新模型列表，不再重复绑定事件 / 加载侧边栏
+            Chat.loadModels();
+            return;
+        }
+        this._initialized = true;
+
         this.api = window.KnowledgeAPI;
         ctx.api = this.api;
         injectCtx();
@@ -231,6 +240,18 @@ const KnowledgeApp = {
                 // 点击其他区域：关闭菜单
                 if (menu) menu.style.display = 'none';
             });
+
+            // 一键测试模型按钮（仅绑一次）
+            if (!this._testModelBtnBound) {
+                this._testModelBtnBound = true;
+                document.addEventListener('click', (e) => {
+                    const testBtn = e.target.closest('#btn-test-current-model');
+                    if (testBtn) {
+                        e.stopPropagation();
+                        Chat.testCurrentModel();
+                    }
+                });
+            }
         }
     },
 

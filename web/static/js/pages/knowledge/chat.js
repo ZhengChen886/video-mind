@@ -72,7 +72,7 @@ export async function sendMessage() {
                     _state.currentConversation = convResponse.data;
                 }
             }
-            const { loadConversations } = await import('./sidebar.js');
+            const { loadConversations } = await import('./sidebar.js?v=20260618n');
             await loadConversations();
         } else {
             addMessage('assistant', `错误: ${response.error}`);
@@ -84,6 +84,8 @@ export async function sendMessage() {
 }
 
 export function addMessage(role, content) {
+    if (!_state) return;
+    if (!Array.isArray(_state.messages)) _state.messages = [];
     _state.messages.push({ role, content });
     renderChatMessages();
 }
@@ -91,12 +93,14 @@ export function addMessage(role, content) {
 export function renderChatMessages() {
     const container = document.getElementById('chat-messages');
     if (!container) return;
-    if (_state.messages.length === 0) {
+    if (!_state) return;
+    const messages = Array.isArray(_state.messages) ? _state.messages : [];
+    if (messages.length === 0) {
         container.innerHTML = `<div class="empty-hint">${_state.currentDoc ? '开始提问吧！' : '请先在左侧选择一个文档'}</div>`;
         return;
     }
     let html = '';
-    _state.messages.forEach((msg, index) => {
+    messages.forEach((msg, index) => {
         let contentHtml;
         let contentClass;
         if (msg.role === 'assistant') {
@@ -223,21 +227,87 @@ export function updateModelButtonText() {
 }
 
 export async function loadConversation(convId, autoLoadDoc = true) {
+    console.log('[loadConversation] 开始加载对话:', convId);
+    // 早退保护：若 _state 未注入（init() 未跑 / 模块未 setCtx），直接失败，
+    // 避免后续 _state.currentConversation 抛 TypeError 后被栈定位到 catch 行
+    if (!_state || !_api) {
+        console.error('[loadConversation] _state / _api 未初始化，跳过');
+        showToast('加载对话失败：知识库未初始化，请刷新页面', 'error');
+        return;
+    }
     try {
         const response = await _api.getConversation(convId);
-        if (response.success) {
-            _state.currentConversation = response.data;
-            _state.messages = response.data.messages || [];
-            renderChatMessages();
-            const { renderConversationList } = await import('./sidebar.js');
-            renderConversationList();
-            if (autoLoadDoc && response.data.doc_id) {
-                const { selectDocument } = await import('./doc_preview.js');
-                await selectDocument(response.data.doc_id);
+        console.log('[loadConversation] API 响应:', response);
+        if (response && response.success) {
+            try {
+                _state.currentConversation = response.data;
+                _state.messages = (response.data && response.data.messages) || [];
+            } catch (e) {
+                console.error('[loadConversation] 写入 state 失败:', e);
             }
+            try { renderChatMessages(); } catch (e) { console.error('[loadConversation] renderChatMessages 失败:', e); }
+            try {
+                // 动态 import 必须带版本号，否则浏览器复用旧版缓存
+                const { renderConversationList } = await import('./sidebar.js?v=20260618n');
+                renderConversationList();
+            } catch (e) {
+                console.error('[loadConversation] renderConversationList 失败:', e);
+            }
+            if (autoLoadDoc && response.data && response.data.doc_id) {
+                console.log('[loadConversation] 加载关联文档:', response.data.doc_id);
+                try {
+                    const { selectDocument } = await import('./doc_preview.js?v=20260618n');
+                    await selectDocument(response.data.doc_id);
+                } catch (e) {
+                    console.error('[loadConversation] selectDocument 失败:', e, e?.stack || '');
+                    // selectDocument 自身有 try/catch 一般不会冒泡，这里兜底
+                    showToast('加载关联文档失败：' + (e?.message || e), 'error');
+                }
+            }
+        } else {
+            console.error('[loadConversation] API 返回失败:', response);
+            showToast('加载对话失败：' + ((response && response.error) || '未知错误'), 'error');
         }
     } catch (error) {
-        showToast('加载对话失败', 'error');
+        // 兜底：捕获 try 块顶层异常，附完整 stack 便于定位
+        console.error('[loadConversation] 异常:', error, error && error.stack ? error.stack : '(no stack)');
+        showToast('加载对话失败：' + (error?.message || error), 'error');
+    }
+}
+
+// 一键测试当前选中的模型连通性
+export async function testCurrentModel() {
+    const btn = document.getElementById('btn-test-current-model');
+    if (!btn) return;
+    const modelToTest = _state.selectedModel || null;
+    if (!modelToTest) {
+        // 默认模型场景：先检查当前激活 provider 是否配置了默认模型
+        if (window.knowledgeApp && window.knowledgeApp.config) {
+            const cfg = window.knowledgeApp.config;
+            const provider = cfg.providers && cfg.providers[cfg.active_provider];
+            if (!provider || !provider.default_model) {
+                showToast('当前未选择模型，且未配置默认模型', 'warning');
+                return;
+            }
+        }
+    }
+
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '测试中...';
+
+    try {
+        const data = await _api.testModel(null, modelToTest);
+        if (data && data.success) {
+            showToast(`✅ 连通成功（${data.latency_ms}ms）`, 'success');
+        } else {
+            showToast('❌ 连通失败：' + (data?.error || '未知错误'), 'error');
+        }
+    } catch (e) {
+        showToast('❌ 连通失败：' + e.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
     }
 }
 
@@ -251,7 +321,7 @@ export async function newConversation() {
             _state.currentConversation = response.data;
             _state.messages = [];
             renderChatMessages();
-            const { loadConversations } = await import('./sidebar.js');
+            const { loadConversations } = await import('./sidebar.js?v=20260618n');
             await loadConversations();
         }
     } catch (error) {

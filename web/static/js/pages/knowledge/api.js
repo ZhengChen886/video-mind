@@ -10,9 +10,17 @@ const KnowledgeAPI = {
                     ...options.headers
                 }
             });
-            return await response.json();
+            const data = await response.json().catch(() => null);
+            if (!response.ok) {
+                const errMsg = (data && (data.error || data.message)) || `HTTP ${response.status}`;
+                const error = new Error(errMsg);
+                error.status = response.status;
+                error.payload = data;
+                throw error;
+            }
+            return data;
         } catch (error) {
-            console.error('API 请求失败:', error);
+            console.error('[KnowledgeAPI] 请求失败:', endpoint, error);
             throw error;
         }
     },
@@ -211,6 +219,17 @@ const KnowledgeAPI = {
         return this.request('/knowledge/models/save', {
             method: 'POST',
             body: JSON.stringify({ provider_id: providerId, models: models })
+        });
+    },
+
+    // 测试模型连通性
+    async testModel(providerId = null, model = null) {
+        const payload = {};
+        if (providerId) payload.provider_id = providerId;
+        if (model) payload.model = model;
+        return this.request('/model/test', {
+            method: 'POST',
+            body: JSON.stringify(payload)
         });
     }
 };

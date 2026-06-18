@@ -275,21 +275,29 @@ export function showFavoriteDetail(favId) {
 export async function loadConversations() {
     try {
         const response = await _api.listConversations();
-        if (response.success) {
-            _state.conversations = response.data;
+        if (response && response.success) {
+            // 兜底：后端 success_response 在 data 为 None 时省略 data 字段，
+            // 避免后续 .filter / .find 在 null 上调用而抛 TypeError
+            _state.conversations = Array.isArray(response.data) ? response.data : [];
             renderConversationList();
+        } else {
+            // 失败时也保持数组形态，避免破窗
+            if (!Array.isArray(_state.conversations)) _state.conversations = [];
         }
     } catch (error) {
         console.error('加载对话列表失败:', error);
+        if (!Array.isArray(_state.conversations)) _state.conversations = [];
     }
 }
 
 export function renderConversationList() {
     const container = document.getElementById('conversation-list');
     if (!container) return;
-    let filteredConversations = _state.conversations;
+    // 兜底：防止 _state.conversations 异常为 null/undefined 时抛 TypeError
+    const allConversations = Array.isArray(_state.conversations) ? _state.conversations : [];
+    let filteredConversations = allConversations;
     if (_state.currentDoc) {
-        filteredConversations = _state.conversations.filter(
+        filteredConversations = allConversations.filter(
             conv => conv.doc_id === _state.currentDoc.path
         );
     }
@@ -324,7 +332,7 @@ export function renderConversationList() {
 
 export function showRenameDialog(convId) {
     _state.currentRenameConvId = convId;
-    const conv = _state.conversations.find(c => c.id === convId);
+    const conv = (_state.conversations || []).find(c => c.id === convId);
     const dialog = document.getElementById('modalRenameConversation');
     const input = document.getElementById('renameConvInput');
     if (conv) input.value = conv.title || '';
@@ -367,7 +375,7 @@ export async function deleteConversation(convId) {
             if (_state.currentConversation?.id === convId) {
                 _state.currentConversation = null;
                 _state.messages = [];
-                const { renderChatMessages } = await import('./chat.js');
+                const { renderChatMessages } = await import('./chat.js?v=20260618n');
                 renderChatMessages();
             }
             await loadConversations();

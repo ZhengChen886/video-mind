@@ -1665,11 +1665,69 @@ async def get_models_api(provider_id: str = None):
         if provider_id is None:
             config = GLOBAL_CONFIG
             provider_id = config.get("active_provider")
-        
+
         models = config_manager.get_provider_models(provider_id)
         return {"success": True, "models": models, "provider_id": provider_id}
     except Exception as e:
         print(f"[Server] 获取模型列表异常: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": str(e)}
+        )
+
+
+@app.post("/api/model/test", response_class=JSONResponse)
+async def test_model_connection(request: Request):
+    """测试模型连通性：发送一条最小 chat.completions 请求"""
+    import time
+    try:
+        body = await request.json()
+        provider_id = body.get("provider_id")
+        model = body.get("model")
+
+        config = config_manager.load_config()
+        if not provider_id:
+            provider_id = config.get("active_provider", "open-ai")
+
+        provider_config = config.get("providers", {}).get(provider_id, {})
+        api_url = provider_config.get("api_url", "")
+        api_key = provider_config.get("api_key", "")
+
+        if not api_url or not api_key:
+            return {
+                "success": False,
+                "error": f"提供商 {provider_id} 未配置 API 地址或 Key"
+            }
+
+        if not model:
+            model = provider_config.get("default_model", "")
+
+        if not model:
+            return {
+                "success": False,
+                "error": f"提供商 {provider_id} 未设置默认模型"
+            }
+
+        start = time.time()
+        try:
+            from openai import OpenAI
+            client = OpenAI(base_url=api_url, api_key=api_key, timeout=15.0)
+            response = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": "ping"}],
+                max_tokens=10,
+            )
+            latency_ms = int((time.time() - start) * 1000)
+            return {
+                "success": True,
+                "latency_ms": latency_ms,
+                "model": model,
+                "provider": provider_id
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e), "model": model, "provider": provider_id}
+    except Exception as e:
+        print(f"[Server] 测试模型连通性异常: {e}")
         return JSONResponse(
             status_code=500,
             content={"success": False, "error": str(e)}

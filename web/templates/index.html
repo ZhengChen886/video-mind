@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI视频分析助手</title>
-    <link rel="stylesheet" href="/static/css/main.css?v=20260617b">
+    <link rel="stylesheet" href="/static/css/main.css?v=20260618i">
     <link rel="stylesheet" href="/static/css/components/navbar.css">
     <link rel="stylesheet" href="/static/css/components/sidebar.css">
     <link rel="stylesheet" href="/static/css/components/cards.css">
@@ -759,6 +759,12 @@
                 </div>
             </div>
             <div class="modal-footer">
+                <button class="btn btn-secondary" id="testConnectionBtn" style="margin-right:auto">
+                    <svg viewBox="0 0 24 24" style="width:14px;height:14px;margin-right:4px" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                    </svg>
+                    测试连通性
+                </button>
                 <button class="btn btn-secondary" id="cancelSettings">取消</button>
                 <button class="btn btn-primary" id="saveSettings">保存设置</button>
             </div>
@@ -1033,6 +1039,11 @@
                                     <polyline points="6 9 12 15 18 9"/>
                                 </svg>
                             </button>
+                            <button type="button" id="btn-test-current-model" class="btn-test-model" title="测试当前模型连通性">
+                                <svg viewBox="0 0 24 24" style="width:14px;height:14px" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                                </svg>
+                            </button>
                             <div id="chat-model-menu" class="chat-model-menu" style="display:none;">
                                 <div class="chat-model-menu-item" data-model-id="">
                                     <div class="chat-model-menu-title">使用默认模型</div>
@@ -1127,11 +1138,11 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
     <!-- ES Module 入口：app.js 内部按需 import 其它模块 -->
-    <script type="module" src="/static/js/app.js?v=20260618e"></script>
+    <script type="module" src="/static/js/app.js?v=20260618n"></script>
     <!-- Knowledge API 由 app.js 内的 initKnowledgeApp 触发，单独 script 加载以确保 window.KnowledgeAPI 就绪 -->
-    <script src="/static/js/pages/knowledge/api.js?v=20260618e"></script>
+    <script src="/static/js/pages/knowledge/api.js?v=20260618n"></script>
     <!-- 知识库 UI 子工具（保持原 script 顺序以兼容现有交互） -->
-    <script src="/static/js/pages/knowledge/video_extractor_ui.js?v=20260618e"></script>
+    <script src="/static/js/pages/knowledge/video_extractor_ui.js?v=20260618n"></script>
 
     <!-- 侧边栏 sidebar-user 下拉菜单（position: fixed 避免被 overflow 容器裁剪） -->
     <div class="user-dropdown sidebar-user-dropdown" id="sidebarUserDropdown">

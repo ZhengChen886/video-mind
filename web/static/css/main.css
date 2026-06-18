@@ -98,6 +98,30 @@ body {
     line-height: 1;
 }
 
+/* 一键测试模型连通性按钮 */
+.btn-test-model {
+    background: none;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    cursor: pointer;
+    padding: 4px 8px;
+    color: #64748b;
+    display: inline-flex;
+    align-items: center;
+    margin-left: 6px;
+    vertical-align: middle;
+    transition: all 0.2s;
+}
+.btn-test-model:hover:not(:disabled) {
+    background: #f1f5f9;
+    color: #334155;
+    border-color: #cbd5e1;
+}
+.btn-test-model:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
 .btn-danger {
     background: var(--danger-color);
     color: white;

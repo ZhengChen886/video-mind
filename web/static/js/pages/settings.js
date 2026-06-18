@@ -281,3 +281,44 @@ export async function saveSettings() {
         alert('保存失败：' + e.message);
     }
 }
+
+// 测试当前编辑 provider 的模型连通性
+export async function testConnection() {
+    const btn = document.getElementById('testConnectionBtn');
+    if (!btn) return;
+    const activeTab = document.querySelector('.provider-tab.active');
+    const providerId = activeTab ? activeTab.dataset.provider : (state.currentConfig.active_provider || 'open-ai');
+    const model = document.getElementById('configDefaultModel')?.value || '';
+
+    if (!model) {
+        alert('请先选择默认模型再测试');
+        return;
+    }
+
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '测试中...';
+
+    try {
+        // 优先使用 KnowledgeAPI，缺少时回退到原生 fetch
+        const api = window.KnowledgeAPI;
+        const data = api && typeof api.testModel === 'function'
+            ? await api.testModel(providerId, model)
+            : await (await fetch('/api/model/test', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ provider_id: providerId, model })
+            })).json();
+
+        if (data && data.success) {
+            alert(`✅ 连通成功！\n模型：${data.model || model}\n耗时：${data.latency_ms}ms`);
+        } else {
+            alert('❌ 连通失败：' + (data?.error || '未知错误'));
+        }
+    } catch (e) {
+        alert('❌ 连通失败：' + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+    }
+}
