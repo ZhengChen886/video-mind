@@ -4,6 +4,7 @@
 // 文档加载、文件/目录点击事件
 // ============================
 import { API_BASE_URL } from '../core/config.js';
+import { loadFileList } from '../core/api.js';
 import { state } from '../core/state.js';
 import { formatFileSize, escapeHtml } from '../core/utils.js';
 
@@ -17,9 +18,8 @@ export async function loadFiles() {
     const searchInput = document.getElementById('searchInput');
     const searchQuery = searchInput ? searchInput.value.toLowerCase() : '';
     try {
-        const response = await fetch(`${API_BASE_URL}/api/files?path=${encodeURIComponent(state.currentPath)}&media_type=video`);
-        const data = await response.json();
-        if (data.success) {
+        const data = await loadFileList(state.currentPath, 'video');
+        if (data && data.success) {
             const videoItems = (data.items || []).filter(item => item.type === 'directory' || item.media_type === 'video');
             renderFiles(videoItems, searchQuery, { mode: 'video' });
             updatePathNav('视频库');
@@ -37,9 +37,8 @@ export async function loadAudioFiles() {
     const searchInput = document.getElementById('searchInput');
     const searchQuery = searchInput ? searchInput.value.toLowerCase() : '';
     try {
-        const response = await fetch(`${API_BASE_URL}/api/files?path=${encodeURIComponent(state.currentAudioPath)}&media_type=audio`);
-        const data = await response.json();
-        if (data.success) {
+        const data = await loadFileList(state.currentAudioPath, 'audio');
+        if (data && data.success) {
             const audioItems = (data.items || []).filter(item => {
                 if (item.type === 'directory') return true;
                 return item.media_type === 'audio';
@@ -160,9 +159,8 @@ export async function loadSidebarVideoFolders() {
     const submenu = document.getElementById('videos-submenu');
     if (!submenu) return;
     try {
-        const response = await fetch(`${API_BASE_URL}/api/files?path=&media_type=video`);
-        const data = await response.json();
-        if (data.success) {
+        const data = await loadFileList('', 'video');
+        if (data && data.success) {
             const dirs = data.items.filter(item => item.type === 'directory');
             let html = '';
             html += `<div class="menu-item" data-path="">
@@ -194,9 +192,8 @@ export async function loadSidebarAudioFolders() {
     const submenu = document.getElementById('audios-submenu');
     if (!submenu) return;
     try {
-        const response = await fetch(`${API_BASE_URL}/api/files?path=&media_type=audio`);
-        const data = await response.json();
-        if (data.success) {
+        const data = await loadFileList('', 'audio');
+        if (data && data.success) {
             const dirs = data.items.filter(item => item.type === 'directory');
             let html = '';
             html += `<div class="menu-item" data-path="">
@@ -647,9 +644,8 @@ function showCardActions(event) {
 export async function loadDirectories() {
     const media_type = state.isShowingAudio ? 'audio' : 'video';
     try {
-        const response = await fetch(`${API_BASE_URL}/api/files?path=&media_type=${media_type}`);
-        const data = await response.json();
-        if (data.success) {
+        const data = await loadFileList('', media_type);
+        if (data && data.success) {
             const dirs = data.items.filter(item => item.type === 'directory');
             const urlUploadDir = document.getElementById('urlUploadDir');
             const moveTargetDir = document.getElementById('moveTargetDir');

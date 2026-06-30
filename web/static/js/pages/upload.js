@@ -3,6 +3,7 @@
 // 职责：文件上传、URL 上传、轮询、URL 列表管理
 // ============================
 import { API_BASE_URL } from '../core/config.js';
+import { getTaskStatus } from '../core/api.js';
 import { state } from '../core/state.js';
 import { escapeHtml } from '../core/utils.js';
 
@@ -143,9 +144,8 @@ export function startUrlDownloadPolling() {
     if (progressContainer) progressContainer.style.display = 'block';
     state.urlPollingInterval = setInterval(async () => {
         try {
-            const response = await fetch(`${API_BASE_URL}/api/tasks/${state.currentUrlDownloadTaskId}`);
-            const data = await response.json();
-            if (data.success) {
+            const data = await getTaskStatus(state.currentUrlDownloadTaskId);
+            if (data && data.success) {
                 const task = data.task;
                 let completedCount = 0;
                 let totalCount = 0;

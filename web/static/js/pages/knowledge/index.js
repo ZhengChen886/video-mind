@@ -4,11 +4,11 @@
 // 真正实现拆分到 sidebar.js / chat.js / doc_preview.js / tts.js
 // 保留 window.KnowledgeApp / window.knowledgePage 兼容桥
 // ============================
-import * as Sidebar from './sidebar.js?v=20260618n';
-import * as Chat from './chat.js?v=20260618n';
-import * as DocPreview from './doc_preview.js?v=20260618n';
-import * as TTS from './tts.js?v=20260618n';
-import { showToast } from '../../core/utils.js?v=20260618n';
+import * as Sidebar from './sidebar.js';
+import * as Chat from './chat.js';
+import * as DocPreview from './doc_preview.js';
+import * as TTS from './tts.js';
+import { showToast } from '../../core/utils.js';
 
 const state = {
     currentDoc: null,

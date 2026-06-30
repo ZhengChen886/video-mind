@@ -3,6 +3,7 @@
 // 职责：首页统计、图表、最近活动、问候语
 // ============================
 import { API_BASE_URL } from '../core/config.js';
+import { loadFileList } from '../core/api.js';
 import { state } from '../core/state.js';
 import { formatFileSize, escapeHtml } from '../core/utils.js';
 
@@ -32,9 +33,8 @@ export async function loadStats() {
         }
 
         // 降级：使用 /api/files
-        const response = await fetch(`${API_BASE_URL}/api/files?path=`);
-        const data = await response.json();
-        if (data.success) {
+        const data = await loadFileList('', 'video');
+        if (data && data.success) {
             let videoCount = 0;
             let totalSize = 0;
             (data.items || []).forEach(item => {

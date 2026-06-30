@@ -2,14 +2,13 @@
 // pages/tasks.js
 // 职责：任务中心加载、渲染、轮询、清除
 // ============================
-import { API_BASE_URL } from '../core/config.js';
+import { listTasks, clearCompletedTasksApi } from '../core/api.js';
 import { state } from '../core/state.js';
 
 export async function loadTasks() {
     try {
-        const response = await fetch(`${API_BASE_URL}/api/tasks`);
-        const data = await response.json();
-        if (data.success) {
+        const data = await listTasks();
+        if (data && data.success) {
             renderTasks(data.tasks);
         }
     } catch (error) {
@@ -84,7 +83,7 @@ export function stopTasksPolling() {
 
 export async function clearCompletedTasks() {
     try {
-        await fetch(`${API_BASE_URL}/api/tasks/clear-completed`, { method: 'POST' });
+        await clearCompletedTasksApi();
         loadTasks();
     } catch (error) {
         console.error('清除任务失败:', error);

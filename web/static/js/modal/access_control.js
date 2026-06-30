@@ -4,6 +4,7 @@
 // 从原 index.html 内联脚本中迁出
 // ============================
 import { state } from '../core/state.js';
+import { getConfigStatus } from '../core/api.js';
 
 export function initAccessControl() {
     document.querySelectorAll('[data-page]').forEach(btn => {
@@ -38,9 +39,8 @@ export function initAccessControl() {
 
 export async function checkApiConfig() {
     try {
-        const response = await fetch('/api/config/status');
-        const data = await response.json();
-        if (data.success) {
+        const data = await getConfigStatus();
+        if (data && data.success) {
             state.currentConfig.initialized = data.initialized;
             return data.api_configured;
         }

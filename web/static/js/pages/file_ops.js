@@ -2,15 +2,21 @@
 // pages/file_ops.js
 // 职责：新建目录、重命名、移动、删除
 // ============================
-import { API_BASE_URL } from '../core/config.js';
+import {
+    loadFileList,
+    createFolderApi,
+    renameItemApi,
+    moveItemApi,
+    countItem,
+    deleteItemApi
+} from '../core/api.js';
 import { state } from '../core/state.js';
 
 export async function loadDirectories() {
     const media_type = state.isShowingAudio ? 'audio' : 'video';
     try {
-        const response = await fetch(`${API_BASE_URL}/api/files?path=&media_type=${media_type}`);
-        const data = await response.json();
-        if (data.success) {
+        const data = await loadFileList('', media_type);
+        if (data && data.success) {
             const dirs = data.items.filter(item => item.type === 'directory');
             const urlUploadDir = document.getElementById('urlUploadDir');
             const moveTargetDir = document.getElementById('moveTargetDir');
@@ -47,13 +53,8 @@ export async function createFolder() {
     const media_type = state.isShowingAudio ? 'audio' : 'video';
     const basePath = state.isShowingAudio ? state.currentAudioPath : state.currentPath;
     try {
-        const response = await fetch(`${API_BASE_URL}/api/folders`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ path: basePath, name, media_type })
-        });
-        const data = await response.json();
-        if (data.success) {
+        const data = await createFolderApi(basePath, name, media_type);
+        if (data && data.success) {
             const modal = document.getElementById('modalNewFolder');
             if (modal) modal.classList.remove('show');
             if (nameEl) nameEl.value = '';
@@ -64,7 +65,7 @@ export async function createFolder() {
             if (state.isShowingAudio) await loadSidebarAudioFolders();
             else await loadSidebarVideoFolders();
         } else {
-            alert('创建失败: ' + data.error);
+            alert('创建失败: ' + (data && data.error));
         }
     } catch (error) {
         alert('创建失败: ' + error.message);
@@ -113,13 +114,8 @@ export async function renameFile() {
     if (!path || !newName) return;
     const media_type = state.isShowingAudio ? 'audio' : 'video';
     try {
-        const response = await fetch(`${API_BASE_URL}/api/item/rename`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ source_path: path, new_name: newName, media_type })
-        });
-        const data = await response.json();
-        if (data.success) {
+        const data = await renameItemApi(path, newName, media_type);
+        if (data && data.success) {
             if (modal) modal.classList.remove('show');
             const segments = path.split('/').filter(Boolean);
             segments[segments.length - 1] = newName;
@@ -132,7 +128,7 @@ export async function renameFile() {
             else await loadFiles();
             refreshAfterStructureChange();
         } else {
-            alert('重命名失败: ' + data.error);
+            alert('重命名失败: ' + (data && data.error));
         }
     } catch (error) {
         alert('重命名失败: ' + error.message);
@@ -155,13 +151,8 @@ export async function moveFile() {
     if (!path) return;
     const media_type = state.isShowingAudio ? 'audio' : 'video';
     try {
-        const response = await fetch(`${API_BASE_URL}/api/item/move`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ source_path: path, target_dir: targetDir, media_type })
-        });
-        const data = await response.json();
-        if (data.success) {
+        const data = await moveItemApi(path, targetDir, media_type);
+        if (data && data.success) {
             if (modal) modal.classList.remove('show');
             const oldName = path.split('/').filter(Boolean).pop() || '';
             const newItemPath = targetDir ? `${targetDir}/${oldName}` : oldName;
@@ -173,7 +164,7 @@ export async function moveFile() {
             else await loadFiles();
             refreshAfterStructureChange();
         } else {
-            alert('移动失败: ' + data.error);
+            alert('移动失败: ' + (data && data.error));
         }
     } catch (error) {
         alert('移动失败: ' + error.message);
@@ -209,11 +200,8 @@ export async function renderDeleteModal(path) {
     modal.dataset.itemType = '';
     const media_type = state.isShowingAudio ? 'audio' : 'video';
     try {
-        const response = await fetch(
-            `${API_BASE_URL}/api/item/count?path=${encodeURIComponent(path)}&media_type=${media_type}`
-        );
-        const data = await response.json();
-        if (!data.success) return;
+        const data = await countItem(path, media_type);
+        if (!data || !data.success) return;
         const realName = data.name || itemName;
         modal.dataset.itemName = realName;
         modal.dataset.itemType = data.type;
@@ -235,13 +223,8 @@ export async function deleteSelected() {
     const media_type = state.isShowingAudio ? 'audio' : 'video';
     const path = state.selectedItems[0];
     try {
-        const response = await fetch(`${API_BASE_URL}/api/item/delete`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ source_path: path, media_type })
-        });
-        const data = await response.json();
-        if (data.success) {
+        const data = await deleteItemApi(path, media_type);
+        if (data && data.success) {
             const modal = document.getElementById('modalDelete');
             if (modal) modal.classList.remove('show');
             state.selectedItems = [];
@@ -253,7 +236,7 @@ export async function deleteSelected() {
                 else await loadSidebarVideoFolders();
             }
         } else {
-            alert('删除失败: ' + data.error);
+            alert('删除失败: ' + (data && data.error));
         }
     } catch (error) {
         alert('删除失败: ' + error.message);

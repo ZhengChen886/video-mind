@@ -4,15 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI视频分析助手</title>
-    <link rel="stylesheet" href="/static/css/main.css?v=20260618i">
-    <link rel="stylesheet" href="/static/css/components/navbar.css">
-    <link rel="stylesheet" href="/static/css/components/sidebar.css">
-    <link rel="stylesheet" href="/static/css/components/cards.css">
-    <link rel="stylesheet" href="/static/css/components/modal.css">
-    <link rel="stylesheet" href="/static/css/components/detail-panel.css">
-    <link rel="stylesheet" href="/static/css/pages/home.css">
-    <link rel="stylesheet" href="/static/css/pages/videos.css">
-    <link rel="stylesheet" href="/static/js/pages/knowledge/styles/knowledge.css">
+    <link rel="stylesheet" href="/static/css/main.css?v={{ build_id }}">
+    <link rel="stylesheet" href="/static/css/components/navbar.css?v={{ build_id }}">
+    <link rel="stylesheet" href="/static/css/components/sidebar.css?v={{ build_id }}">
+    <link rel="stylesheet" href="/static/css/components/cards.css?v={{ build_id }}">
+    <link rel="stylesheet" href="/static/css/components/modal.css?v={{ build_id }}">
+    <link rel="stylesheet" href="/static/css/components/detail-panel.css?v={{ build_id }}">
+    <link rel="stylesheet" href="/static/css/pages/home.css?v={{ build_id }}">
+    <link rel="stylesheet" href="/static/css/pages/videos.css?v={{ build_id }}">
+    <link rel="stylesheet" href="/static/js/pages/knowledge/styles/knowledge.css?v={{ build_id }}">
 </head>
 <body>
     <div class="main-wrapper">
@@ -1138,11 +1138,11 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
     <!-- ES Module 入口：app.js 内部按需 import 其它模块 -->
-    <script type="module" src="/static/js/app.js?v=20260618n"></script>
+    <script type="module" src="/static/js/app.js?v={{ build_id }}"></script>
     <!-- Knowledge API 由 app.js 内的 initKnowledgeApp 触发，单独 script 加载以确保 window.KnowledgeAPI 就绪 -->
-    <script src="/static/js/pages/knowledge/api.js?v=20260618n"></script>
+    <script src="/static/js/pages/knowledge/api.js?v={{ build_id }}"></script>
     <!-- 知识库 UI 子工具（保持原 script 顺序以兼容现有交互） -->
-    <script src="/static/js/pages/knowledge/video_extractor_ui.js?v=20260618n"></script>
+    <script src="/static/js/pages/knowledge/video_extractor_ui.js?v={{ build_id }}"></script>
 
     <!-- 侧边栏 sidebar-user 下拉菜单（position: fixed 避免被 overflow 容器裁剪） -->
     <div class="user-dropdown sidebar-user-dropdown" id="sidebarUserDropdown">

@@ -2,7 +2,7 @@
 // pages/selection.js
 // 职责：批量选择、全选、清除选择、批量转录
 // ============================
-import { API_BASE_URL } from '../core/config.js';
+import { batchAnalyzeApi } from '../core/api.js';
 import { state } from '../core/state.js';
 
 export function toggleVideoSelection(path) {
@@ -64,19 +64,14 @@ export function clearSelection() {
 export async function startBatchTranscribe() {
     if (state.selectedVideoPaths.length === 0) return;
     try {
-        const response = await fetch(`${API_BASE_URL}/api/video/analyze/batch`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ paths: state.selectedVideoPaths })
-        });
-        const data = await response.json();
-        if (data.success) {
+        const data = await batchAnalyzeApi(state.selectedVideoPaths);
+        if (data && data.success) {
             state.currentTranscribeTaskId = data.task_id;
             document.getElementById('modalTasks').classList.add('show');
             import('./tasks.js').then(m => m.startTasksPolling());
             clearSelection();
         } else {
-            alert('创建转录任务失败: ' + data.error);
+            alert('创建转录任务失败: ' + ((data && data.error) || '未知错误'));
         }
     } catch (error) {
         alert('创建转录任务失败: ' + error.message);

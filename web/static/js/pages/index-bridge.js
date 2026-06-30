@@ -3,17 +3,17 @@
 // 职责：聚合 pages/ 各模块的导出，避免 core/events.js 与具体子模块之间的循环依赖
 // 同时把跨多个模块使用的桥接函数（switchPage、openSettingsModal 等）集中再导出
 // ============================
-import { state } from '../core/state.js?v=20260618i';
-import { API_BASE_URL } from '../core/config.js?v=20260618i';
-import { loadFiles, loadAudioFiles, loadDirectories, updatePathNav, navigateToPath, updateSidebarActiveState, loadSidebarVideoFolders, loadSidebarAudioFolders, toggleSubmenu, loadDocuments, renderDocuments, renderDocumentCardsView, renderDocumentListView, renderFiles, renderCardsView, renderListView, loadThumbnails, bindSidebarEvents, bindParentMenuToggles, bindFileEvents, updateTopBarMode } from './videos.js?v=20260618i';
-import { toggleVideoSelection, renderFilesWithSelection, updateBatchToolbar, toggleSelectAll, clearSelection, startBatchTranscribe } from './selection.js?v=20260618i';
-import { loadTasks, renderTasks, startTasksPolling, stopTasksPolling, clearCompletedTasks } from './tasks.js?v=20260618i';
-import { handleFileSelect, updateSelectedFilesList, removeSelectedFile, uploadFile, extractFilenameFromUrl, uploadByUrl, startUrlDownloadPolling, initUrlUploadInput, renderUrlList, updateFilename, removeUrlItem } from './upload.js?v=20260618i';
-import { isAudioPath, openVideoDetail, loadAnalysisResults, analyzeVideo, pollTaskProgress, generateSummary, generateNotes, generateOutline } from './video_detail.js?v=20260618i';
-import { loadDirectories as loadDirectoriesModal, createFolder, computePathAfterOperation, refreshAfterStructureChange, renameFileFromCard, renameFile, moveFileFromCard, moveFile, deleteFileFromCard, renderDeleteModal, deleteSelected } from './file_ops.js?v=20260618i';
-import { openModelSelectModal, loadModels, renderModelList, confirmModelSelect } from './model_select.js?v=20260618i';
-import { openSettingsModal, loadConfigFromServer, loadProviderConfig, loadModelSelectModels, renderModelsTable, switchProviderTab, getCurrentEditingProviderId, addModelRow, removeModelRow, fetchModels, saveModelsToProvider, saveModelsFromTable, saveSettings, testConnection } from './settings.js?v=20260618i';
-import { initGreeting, bindChartControls, openVideoFromActivity, showBatchAnalyze } from './home.js?v=20260618i';
+import { state } from '../core/state.js';
+import { API_BASE_URL } from '../core/config.js';
+import { loadFiles, loadAudioFiles, loadDirectories, updatePathNav, navigateToPath, updateSidebarActiveState, loadSidebarVideoFolders, loadSidebarAudioFolders, toggleSubmenu, loadDocuments, renderDocuments, renderDocumentCardsView, renderDocumentListView, renderFiles, renderCardsView, renderListView, loadThumbnails, bindSidebarEvents, bindParentMenuToggles, bindFileEvents, updateTopBarMode } from './videos.js';
+import { toggleVideoSelection, renderFilesWithSelection, updateBatchToolbar, toggleSelectAll, clearSelection, startBatchTranscribe } from './selection.js';
+import { loadTasks, renderTasks, startTasksPolling, stopTasksPolling, clearCompletedTasks } from './tasks.js';
+import { handleFileSelect, updateSelectedFilesList, removeSelectedFile, uploadFile, extractFilenameFromUrl, uploadByUrl, startUrlDownloadPolling, initUrlUploadInput, renderUrlList, updateFilename, removeUrlItem } from './upload.js';
+import { isAudioPath, openVideoDetail, loadAnalysisResults, analyzeVideo, pollTaskProgress, generateSummary, generateNotes, generateOutline } from './video_detail.js';
+import { loadDirectories as loadDirectoriesModal, createFolder, computePathAfterOperation, refreshAfterStructureChange, renameFileFromCard, renameFile, moveFileFromCard, moveFile, deleteFileFromCard, renderDeleteModal, deleteSelected } from './file_ops.js';
+import { openModelSelectModal, loadModels, renderModelList, confirmModelSelect } from './model_select.js';
+import { openSettingsModal, loadConfigFromServer, loadProviderConfig, loadModelSelectModels, renderModelsTable, switchProviderTab, getCurrentEditingProviderId, addModelRow, removeModelRow, fetchModels, saveModelsToProvider, saveModelsFromTable, saveSettings, testConnection } from './settings.js';
+import { initGreeting, bindChartControls, openVideoFromActivity, showBatchAnalyze } from './home.js';
 
 // 重新导出以方便 events.js 一次性 import
 export {

@@ -375,7 +375,7 @@ export async function deleteConversation(convId) {
             if (_state.currentConversation?.id === convId) {
                 _state.currentConversation = null;
                 _state.messages = [];
-                const { renderChatMessages } = await import('./chat.js?v=20260618n');
+                const { renderChatMessages } = await import('./chat.js');
                 renderChatMessages();
             }
             await loadConversations();

@@ -1,4 +1,6 @@
 import uuid
+import re
+import hashlib
 import requests
 import threading
 from pathlib import Path
@@ -7,7 +9,7 @@ from typing import List, Dict, Any
 import uvicorn
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles as _BaseStaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.responses import Response
@@ -346,17 +348,59 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS 配置
+# ============================================================
+# CORS 中间件
+# LAN 内网工具：通配 origin 即可；为合法化配置必须 allow_credentials=False
+# （按 CORS 规范，allow_credentials=True 时 origin 不能是通配符 *）
+# ============================================================
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,  # 关键：false（通配 origin 不能配 true，否则部分浏览器会静默拒绝）
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=[
+        "Content-Range",        # Range 媒体响应需要暴露给 JS
+        "Accept-Ranges",
+        "Content-Length",
+        "Content-Disposition",
+    ],
+    max_age=3600,              # 预检结果缓存 1 小时，减少 OPTIONS 请求
 )
 
 # 静态文件服务（带强缓存头，减少首页 ~25 个资源 304 校验的往返开销）
 app.mount("/static", CachedStaticFiles(directory="web/static"), name="static")
+
+# ============================================================
+# 方案 F'：BUILD_ID（启动时基于静态资源 mtime 算 hash）
+# 用途：自动注入到入口 HTML 的 ?v=<BUILD_ID>，避免手动维护版本号
+# 原理：内容不变 → mtime 不变 → hash 不变 → 浏览器缓存命中
+#       内容变化 → 重启服务 → mtime 重算 → hash 变化 → 浏览器拉新
+# ============================================================
+def _calc_build_id() -> str:
+    """遍历 web/static 下所有文件，按 (相对路径 + mtime_ns) 算 MD5，截断 8 位"""
+    h = hashlib.md5()
+    base = Path("web/static")
+    if not base.exists():
+        return "00000000"
+    for f in sorted(base.rglob("*")):
+        if f.is_file():
+            try:
+                rel = str(f.relative_to(base)).encode("utf-8")
+                mtime = str(f.stat().st_mtime_ns).encode("utf-8")
+                h.update(rel)
+                h.update(b"\x00")
+                h.update(mtime)
+                h.update(b"\x00")
+            except OSError:
+                # 文件可能在遍历过程中被修改/删除，跳过即可
+                continue
+    return h.hexdigest()[:8]
+
+
+BUILD_ID = _calc_build_id()
+print(f"[BUILD] BUILD_ID = {BUILD_ID}  (web/static 内容指纹)")
+
 
 # 模板配置
 templates = Jinja2Templates(directory="web/templates")
@@ -398,10 +442,16 @@ app.include_router(dashboard_router)
 # 主页路由
 # ============================================================
 
-@app.get("/")
+@app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
-    """主页"""
-    return templates.TemplateResponse("index.html", {"request": request})
+    """主页（方案 F'：注入 BUILD_ID，HTML 入口永远走协商缓存）"""
+    response = templates.TemplateResponse(
+        "index.html",
+        {"request": request, "build_id": BUILD_ID},
+    )
+    # 入口 HTML 必须每次回服务器校验，确保 ?v=BUILD_ID 拿到最新值
+    response.headers["Cache-Control"] = "no-cache, must-revalidate"
+    return response
 
 # ============================================================
 # 全部视频/音频列表
@@ -447,7 +497,6 @@ async def list_documents(type: str = None):
 
 
 @app.post("/api/folders", response_class=JSONResponse)
-@app.post("/api/directory", response_class=JSONResponse)
 async def create_new_directory(request: Request = None, path: str = "", name: str = "", media_type: str = "video"):
     # 兼容两种调用方式
     if request:
@@ -622,7 +671,6 @@ async def rename_item_api(request: Request):
 
 
 @app.post("/api/upload", response_class=JSONResponse)
-@app.post("/api/video/upload", response_class=JSONResponse)
 async def upload_video(file: UploadFile = File(...), path: str = "", media_type: str = "video"):
     if not file.filename:
         raise HTTPException(status_code=400, detail="未提供文件名")
@@ -651,7 +699,6 @@ async def upload_video(file: UploadFile = File(...), path: str = "", media_type:
 
 
 @app.post("/api/upload/url", response_class=JSONResponse)
-@app.post("/api/video/upload-by-url", response_class=JSONResponse)
 async def upload_video_by_url(request: Request):
     try:
         body = await request.json()
@@ -695,8 +742,85 @@ async def upload_video_by_url(request: Request):
         )
 
 
-@app.get("/api/video/{path:path}", response_class=FileResponse)
-async def get_video(path: str, thumbnail: bool = False, media_type: str = "video"):
+# 媒体流分块大小（1MB），控制单次 read 的 IO 开销与内存占用
+_MEDIA_CHUNK_SIZE = 1024 * 1024
+
+
+async def _range_stream(file_path: Path, start: int, end: int):
+    """按字节范围流式发送文件，避免一次性读入内存"""
+    with open(file_path, "rb") as f:
+        f.seek(start)
+        remaining = end - start + 1
+        while remaining > 0:
+            chunk = f.read(min(_MEDIA_CHUNK_SIZE, remaining))
+            if not chunk:
+                break
+            yield chunk
+            remaining -= len(chunk)
+
+
+# ============================================================
+# 健康检查端点（用于非本地设备快速验证服务可达性）
+# ============================================================
+@app.get("/api/health", response_class=JSONResponse)
+async def health_check():
+    """服务健康检查 + 数据目录自检"""
+    try:
+        video_files = sum(1 for _ in VIDEO_DIR.rglob("*") if _.is_file())
+    except Exception as e:
+        video_files = -1
+    try:
+        audio_files = sum(1 for _ in AUDIO_DIR.rglob("*") if _.is_file())
+    except Exception as e:
+        audio_files = -1
+    return {
+        "success": True,
+        "data": {
+            "status": "ok",
+            "build_id": BUILD_ID,
+            "video_dir": str(VIDEO_DIR),
+            "video_dir_exists": VIDEO_DIR.exists(),
+            "video_file_count": video_files,
+            "audio_dir": str(AUDIO_DIR),
+            "audio_dir_exists": AUDIO_DIR.exists(),
+            "audio_file_count": audio_files,
+        },
+        "message": "服务正常"
+    }
+
+
+# ============================================================
+# 媒体端点显式 OPTIONS 预检（兜底）
+# 部分浏览器对 Range 请求会先发 OPTIONS 预检；CORSMiddleware 通常会自动处理，
+# 但显式声明可避免边界情况被拦截
+# ============================================================
+@app.options("/api/video/{path:path}")
+async def video_options(path: str):
+    """媒体端点 OPTIONS 预检兜底"""
+    return Response(
+        status_code=204,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, OPTIONS",
+            "Access-Control-Allow-Headers": "Range, Content-Type, Accept",
+            "Access-Control-Expose-Headers": "Content-Range, Accept-Ranges, Content-Length",
+            "Access-Control-Max-Age": "3600",
+        },
+    )
+
+
+@app.get("/api/video/{path:path}")
+async def get_video(request: Request, path: str, thumbnail: bool = False, media_type: str = "video"):
+    """
+    媒体文件下载/播放端点（支持 HTTP Range 请求）。
+
+    非本地设备/移动网络下必须支持 Range 才能：
+      - 流畅拖动 <video>/<audio> 进度条（避免重新下载整个文件）
+      - 渐进式播放（边下边播）
+      - 大文件不被一次性加载撑爆内存
+
+    响应头必须包含 Accept-Ranges: bytes，浏览器才知道支持。
+    """
     print(f"[Server] 请求媒体文件: path={path}, thumbnail={thumbnail}, media_type={media_type}")
     if media_type not in ("video", "audio"):
         media_type = "video"
@@ -704,49 +828,70 @@ async def get_video(path: str, thumbnail: bool = False, media_type: str = "video
     print(f"[Server] 完整文件路径: {file_path}")
     print(f"[Server] 文件是否存在: {file_path.exists()}")
 
-    # 如果请求缩略图，返回对应的jpg文件
+    # 缩略图直接走 FileResponse（小文件，无须 Range）
     if thumbnail:
         thumbnail_path = file_path.parent / f"{file_path.stem}.jpg"
-        print(f"[Server] 缩略图路径: {thumbnail_path}, 是否存在: {thumbnail_path.exists()}")
         if thumbnail_path.exists():
             return FileResponse(thumbnail_path, media_type="image/jpeg")
-        else:
-            raise HTTPException(status_code=404, detail="缩略图不存在")
+        raise HTTPException(status_code=404, detail="缩略图不存在")
 
-    if file_path.exists():
-        suffix = file_path.suffix.lower()
-        if suffix == ".mp4":
-            print(f"[Server] 返回MP4文件")
-            return FileResponse(file_path, media_type="video/mp4")
-        elif suffix == ".webm":
-            return FileResponse(file_path, media_type="video/webm")
-        elif suffix == ".mov":
-            return FileResponse(file_path, media_type="video/quicktime")
-        elif suffix == ".mp3":
-            print(f"[Server] 返回MP3音频文件")
-            return FileResponse(file_path, media_type="audio/mpeg")
-        elif suffix == ".m4a":
-            return FileResponse(file_path, media_type="audio/mp4")
-        elif suffix == ".wav":
-            return FileResponse(file_path, media_type="audio/wav")
-        elif suffix == ".ogg":
-            return FileResponse(file_path, media_type="audio/ogg")
-        elif suffix == ".flac":
-            return FileResponse(file_path, media_type="audio/flac")
-        elif suffix == ".aac":
-            return FileResponse(file_path, media_type="audio/aac")
-        elif suffix == ".jpg":
-            print(f"[Server] 返回JPG文件")
-            return FileResponse(file_path, media_type="image/jpeg")
-        else:
-            print(f"[Server] 不支持的文件类型: {file_path.suffix}")
-            raise HTTPException(status_code=404, detail="文件不存在")
-    else:
-        print(f"[Server] 文件不存在: {file_path}")
-        # 列出父目录下的文件用于调试
-        if file_path.parent.exists():
-            print(f"[Server] 父目录内容: {list(file_path.parent.iterdir())}")
+    if not file_path.exists():
         raise HTTPException(status_code=404, detail="文件不存在")
+
+    suffix = file_path.suffix.lower()
+    media_types = {
+        ".mp4": "video/mp4",
+        ".webm": "video/webm",
+        ".mov": "video/quicktime",
+        ".mp3": "audio/mpeg",
+        ".m4a": "audio/mp4",
+        ".wav": "audio/wav",
+        ".ogg": "audio/ogg",
+        ".flac": "audio/flac",
+        ".aac": "audio/aac",
+    }
+    content_type = media_types.get(suffix, "application/octet-stream")
+
+    file_size = file_path.stat().st_size
+
+    # 解析 Range: bytes=start-end
+    range_header = request.headers.get("range", "").strip()
+    range_match = re.match(r"bytes=(\d+)-(\d*)", range_header)
+
+    common_headers = {
+        "Accept-Ranges": "bytes",
+        "Content-Type": content_type,
+        "Cache-Control": "public, max-age=3600",
+    }
+
+    if range_match:
+        start = int(range_match.group(1))
+        end = int(range_match.group(2)) if range_match.group(2) else file_size - 1
+        # 边界保护
+        end = min(end, file_size - 1)
+        if start > end or start >= file_size:
+            raise HTTPException(
+                status_code=416,
+                detail="Requested range not satisfiable",
+                headers={"Content-Range": f"bytes */{file_size}"},
+            )
+        length = end - start + 1
+        return StreamingResponse(
+            _range_stream(file_path, start, end),
+            status_code=206,  # Partial Content
+            headers={
+                **common_headers,
+                "Content-Range": f"bytes {start}-{end}/{file_size}",
+                "Content-Length": str(length),
+            },
+        )
+
+    # 无 Range 头：返回完整文件（200 OK）
+    return StreamingResponse(
+        _range_stream(file_path, 0, file_size - 1),
+        status_code=200,
+        headers={**common_headers, "Content-Length": str(file_size)},
+    )
 
 
 @app.post("/api/video/analyze", response_class=JSONResponse)
@@ -1318,7 +1463,6 @@ async def generate_analysis(request: Request):
 
 
 @app.get("/api/analysis/result", response_class=JSONResponse)
-@app.get("/api/analysis/get-result", response_class=JSONResponse)
 async def get_analysis_result(path: str = "", video_path: str = "", type: str = "summary", media_type: str = "video"):
     # 兼容两种参数名
     video_path = path or video_path
@@ -1421,70 +1565,84 @@ async def get_all_analysis(path: str = "", media_type: str = "video"):
 # 模型和配置管理 API
 # ============================================================
 
-@app.get("/api/models", response_class=JSONResponse)
-async def get_models(provider: str = None):
-    """获取模型列表"""
+@app.get("/api/knowledge/models", response_class=JSONResponse)
+async def get_models_api(provider_id: str = None, source: str = "saved"):
+    """获取模型列表
+
+    source:
+        - "saved"  : 返回 config_manager 中已保存的模型列表（默认）
+        - "remote" : 从远程 API 实时获取模型列表（/api/models 别名调用）
+    """
     try:
-        config = GLOBAL_CONFIG
-        
-        if provider is None:
-            provider = config.get("active_provider", "free-ai")
-        
-        provider_config = config.get("providers", {}).get(provider, {})
-        api_url = provider_config.get("api_url", "")
-        api_key = provider_config.get("api_key", "")
-        
-        if not api_url or not api_key:
-            return {
-                "success": False,
-                "error": f"提供商 {provider} 未配置"
-            }
-        
-        # 获取模型列表
-        try:
-            response = requests.get(
-                f"{api_url}/models",
-                headers={"Authorization": f"Bearer {api_key}"},
-                timeout=10
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                models = data.get("data", [])
-                
-                # 筛选 opc/* 和 or/* 的模型
-                filtered_models = []
-                for model in models:
-                    model_id = model.get("id", "")
-                    if model_id.startswith("opc/") or model_id.startswith("or/"):
-                        filtered_models.append({
-                            "id": model_id,
-                            "name": model_id,
-                            "created": model.get("created", 0),
-                            "owned_by": model.get("owned_by", "")
-                        })
-                
-                return {
-                    "success": True,
-                    "models": filtered_models,
-                    "provider": provider
-                }
-            else:
+        if provider_id is None:
+            config = GLOBAL_CONFIG
+            provider_id = config.get("active_provider")
+
+        if source == "remote":
+            # 从远程 API 实时拉取模型列表
+            config = GLOBAL_CONFIG
+            provider_config = config.get("providers", {}).get(provider_id, {})
+            api_url = provider_config.get("api_url", "")
+            api_key = provider_config.get("api_key", "")
+
+            if not api_url or not api_key:
                 return {
                     "success": False,
-                    "error": f"获取模型列表失败: HTTP {response.status_code}"
+                    "error": f"提供商 {provider_id} 未配置"
                 }
-        except Exception as e:
-            print(f"[Models] 获取模型列表异常: {e}")
-            return {
-                "success": False,
-                "error": f"获取模型列表失败: {str(e)}"
-            }
+
+            try:
+                response = requests.get(
+                    f"{api_url}/models",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                    timeout=10
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    models = data.get("data", [])
+                    filtered_models = []
+                    for model in models:
+                        model_id = model.get("id", "")
+                        if model_id.startswith("opc/") or model_id.startswith("or/"):
+                            filtered_models.append({
+                                "id": model_id,
+                                "name": model_id,
+                                "created": model.get("created", 0),
+                                "owned_by": model.get("owned_by", "")
+                            })
+                    return {
+                        "success": True,
+                        "models": filtered_models,
+                        "provider_id": provider_id
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "error": f"获取模型列表失败: HTTP {response.status_code}"
+                    }
+            except Exception as e:
+                print(f"[Models] 远程获取模型列表异常: {e}")
+                return {
+                    "success": False,
+                    "error": f"获取模型列表失败: {str(e)}"
+                }
+        else:
+            # source == "saved"：从 config_manager 取已保存的模型
+            models = config_manager.get_provider_models(provider_id)
+            return {"success": True, "models": models, "provider_id": provider_id}
     except Exception as e:
-        return {
-            "success": False,
-            "error": str(e)
-        }
+        print(f"[Server] 获取模型列表异常: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": str(e)}
+        )
+
+
+# /api/models 改为 /api/knowledge/models?source=remote 的别名（统一收敛）
+@app.get("/api/models", response_class=JSONResponse)
+async def get_models(provider: str = None):
+    """实时获取远程模型列表（统一收敛到 /api/knowledge/models?source=remote）"""
+    return await get_models_api(provider_id=provider, source="remote")
 
 
 @app.get("/api/config/status", response_class=JSONResponse)
@@ -1658,22 +1816,8 @@ async def save_models_api(request: Request):
         )
 
 
-@app.get("/api/knowledge/models", response_class=JSONResponse)
-async def get_models_api(provider_id: str = None):
-    """获取已保存的模型列表"""
-    try:
-        if provider_id is None:
-            config = GLOBAL_CONFIG
-            provider_id = config.get("active_provider")
-
-        models = config_manager.get_provider_models(provider_id)
-        return {"success": True, "models": models, "provider_id": provider_id}
-    except Exception as e:
-        print(f"[Server] 获取模型列表异常: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={"success": False, "error": str(e)}
-        )
+# /api/knowledge/models 路由已在上方 get_models_api(...) 统一定义（合并 remote + saved 两种 source）
+# 此处不再重复定义 handler，避免路由冲突
 
 
 @app.post("/api/model/test", response_class=JSONResponse)

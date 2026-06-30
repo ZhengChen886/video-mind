@@ -72,7 +72,7 @@ export async function sendMessage() {
                     _state.currentConversation = convResponse.data;
                 }
             }
-            const { loadConversations } = await import('./sidebar.js?v=20260618n');
+            const { loadConversations } = await import('./sidebar.js');
             await loadConversations();
         } else {
             addMessage('assistant', `错误: ${response.error}`);
@@ -248,7 +248,7 @@ export async function loadConversation(convId, autoLoadDoc = true) {
             try { renderChatMessages(); } catch (e) { console.error('[loadConversation] renderChatMessages 失败:', e); }
             try {
                 // 动态 import 必须带版本号，否则浏览器复用旧版缓存
-                const { renderConversationList } = await import('./sidebar.js?v=20260618n');
+                const { renderConversationList } = await import('./sidebar.js');
                 renderConversationList();
             } catch (e) {
                 console.error('[loadConversation] renderConversationList 失败:', e);
@@ -256,7 +256,7 @@ export async function loadConversation(convId, autoLoadDoc = true) {
             if (autoLoadDoc && response.data && response.data.doc_id) {
                 console.log('[loadConversation] 加载关联文档:', response.data.doc_id);
                 try {
-                    const { selectDocument } = await import('./doc_preview.js?v=20260618n');
+                    const { selectDocument } = await import('./doc_preview.js');
                     await selectDocument(response.data.doc_id);
                 } catch (e) {
                     console.error('[loadConversation] selectDocument 失败:', e, e?.stack || '');
@@ -321,7 +321,7 @@ export async function newConversation() {
             _state.currentConversation = response.data;
             _state.messages = [];
             renderChatMessages();
-            const { loadConversations } = await import('./sidebar.js?v=20260618n');
+            const { loadConversations } = await import('./sidebar.js');
             await loadConversations();
         }
     } catch (error) {

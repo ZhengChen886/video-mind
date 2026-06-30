@@ -5,7 +5,11 @@
 // ============================
 
 // API 基础地址
-export const API_BASE_URL = 'http://localhost:8000';
+// 必须跟随用户当前访问的 origin，否则非本地设备会请求到自己的 localhost 而连不上服务
+// 兜底到 'http://localhost:8000' 仅用于不支持 window 的极端环境
+export const API_BASE_URL = (typeof window !== 'undefined' && window.location && window.location.origin)
+    ? window.location.origin
+    : 'http://localhost:8000';
 
 // 应用配置（active provider / providers / current model）
 export const appConfig = {

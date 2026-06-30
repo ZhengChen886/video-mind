@@ -2,7 +2,8 @@
 // pages/model_select.js
 // 职责：模型选择弹窗，加载/渲染/确认
 // ============================
-import { API_BASE_URL, appConfig, saveAppConfig, updateModelDisplay } from '../core/config.js';
+import { appConfig, saveAppConfig, updateModelDisplay } from '../core/config.js';
+import { getRemoteModels } from '../core/api.js';
 import { state } from '../core/state.js';
 
 export function openModelSelectModal() {
@@ -21,13 +22,12 @@ export async function loadModels() {
     if (!modelListEl) return;
     modelListEl.innerHTML = '<div style="padding:40px;text-align:center;color:#94a3b8">加载中...</div>';
     try {
-        const response = await fetch(`${API_BASE_URL}/api/models?provider=${appConfig.activeProvider}`);
-        const data = await response.json();
-        if (data.success) {
+        const data = await getRemoteModels(appConfig.activeProvider);
+        if (data && data.success) {
             state.allModels = data.models;
             renderModelList(state.allModels);
         } else {
-            modelListEl.innerHTML = `<div style="padding:40px;text-align:center;color:#ef4444">${data.error || '加载失败'}</div>`;
+            modelListEl.innerHTML = `<div style="padding:40px;text-align:center;color:#ef4444">${(data && data.error) || '加载失败'}</div>`;
         }
     } catch (error) {
         console.error('加载模型失败:', error);

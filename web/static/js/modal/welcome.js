@@ -6,15 +6,15 @@
 // ============================
 import { state } from '../core/state.js';
 import { updateModelDisplay } from '../core/config.js';
+import { getConfigStatus, saveConfig } from '../core/api.js';
 
 let welcomeStep = 0;
 const totalSteps = 4;
 
 export async function checkInitialConfig() {
     try {
-        const response = await fetch('/api/config/status');
-        const data = await response.json();
-        if (data.success && !data.initialized) {
+        const data = await getConfigStatus();
+        if (data && data.success && !data.initialized) {
             showWelcomeModal();
         }
     } catch (e) {
@@ -166,14 +166,10 @@ export async function finishWelcomeSetup() {
     }
     state.currentConfig.active_provider = selectedProvider;
     try {
-        await fetch('/api/config/save', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                providers: state.currentConfig.providers,
-                active_provider: selectedProvider,
-                set_initialized: true
-            })
+        await saveConfig({
+            providers: state.currentConfig.providers,
+            active_provider: selectedProvider,
+            set_initialized: true
         });
     } catch (e) {
         console.error('Save config failed:', e);

@@ -54,7 +54,7 @@ export async function selectDocument(filePath) {
     }
     try {
         if (_state.ttsIsPlaying || _state.ttsIsPaused) {
-            const { stopTTS } = await import('./tts.js?v=20260618n');
+            const { stopTTS } = await import('./tts.js');
             stopTTS();
             showToast('已停止当前音频播放', 'info');
         }
@@ -64,12 +64,12 @@ export async function selectDocument(filePath) {
             _state.currentDoc = response.data;
             renderDocumentPreview(response.data);
             await checkIndexStatus(filePath);
-            const { loadFiles, renderFileList } = await import('./sidebar.js?v=20260618n');
+            const { loadFiles, renderFileList } = await import('./sidebar.js');
             await loadFiles();
             const docConversations = (_state.conversations || []).filter(
                 conv => conv.doc_id === filePath
             );
-            const { loadConversation, renderChatMessages } = await import('./chat.js?v=20260618n');
+            const { loadConversation, renderChatMessages } = await import('./chat.js');
             if (docConversations.length > 0) {
                 const latestConv = docConversations[0];
                 await loadConversation(latestConv.id, false);
@@ -78,7 +78,7 @@ export async function selectDocument(filePath) {
                 _state.messages = [];
                 renderChatMessages();
             }
-            const { renderConversationList } = await import('./sidebar.js?v=20260618n');
+            const { renderConversationList } = await import('./sidebar.js');
             renderConversationList();
         }
     } catch (error) {

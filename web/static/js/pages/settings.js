@@ -3,6 +3,13 @@
 // 职责：设置弹窗（提供商切换、API Key 显隐、获取模型、保存设置）
 // ============================
 import { API_BASE_URL, appConfig, saveAppConfig, updateModelDisplay } from '../core/config.js';
+import {
+    getConfig,
+    saveConfig,
+    fetchModelsFromProvider,
+    saveModelsForProvider,
+    testModelConnection
+} from '../core/api.js';
 import { state } from '../core/state.js';
 import { escapeAttr } from '../core/utils.js';
 
@@ -14,9 +21,8 @@ export async function openSettingsModal() {
 
 export async function loadConfigFromServer() {
     try {
-        const response = await fetch('/api/config');
-        const data = await response.json();
-        if (data.success) {
+        const data = await getConfig();
+        if (data && data.success) {
             state.currentConfig = data.config;
             const activeProvider = state.currentConfig.active_provider || 'open-ai';
             state.editingProvider = activeProvider;
@@ -140,13 +146,8 @@ export async function fetchModels() {
     const originalText = btn ? btn.textContent : '';
     if (btn) { btn.textContent = '获取中...'; btn.disabled = true; }
     try {
-        const response = await fetch('/api/knowledge/models/fetch', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ api_url: apiUrl || '', api_key: apiKey, models_url: modelsUrl || '' })
-        });
-        const data = await response.json();
-        if (data.success) {
+        const data = await fetchModelsFromProvider(apiUrl, apiKey, modelsUrl);
+        if (data && data.success) {
             await saveModelsToProvider(providerId, data.models);
             loadModelSelectModels(providerId);
             renderModelsTable(providerId);
@@ -155,7 +156,7 @@ export async function fetchModels() {
             }
             alert('成功获取并保存 ' + data.models.length + ' 个模型！');
         } else {
-            alert('获取模型失败：' + (data.error || '未知错误'));
+            alert('获取模型失败：' + ((data && data.error) || '未知错误'));
         }
     } catch (e) {
         alert('获取模型失败：' + e.message);
@@ -168,11 +169,7 @@ export async function saveModelsToProvider(providerId, models) {
     if (!state.currentConfig.providers[providerId]) state.currentConfig.providers[providerId] = {};
     state.currentConfig.providers[providerId].models = models;
     try {
-        await fetch('/api/knowledge/models/save', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ provider_id: providerId, models })
-        });
+        await saveModelsForProvider(providerId, models);
     } catch (e) {
         console.error('保存模型失败', e);
     }
@@ -199,13 +196,8 @@ export async function saveModelsFromTable() {
     const originalText = btn ? btn.textContent : '';
     if (btn) { btn.textContent = '保存中...'; btn.disabled = true; }
     try {
-        const resp = await fetch('/api/knowledge/models/save', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ provider_id: providerId, models: newModels })
-        });
-        const data = await resp.json();
-        if (data.success) {
+        const data = await saveModelsForProvider(providerId, newModels);
+        if (data && data.success) {
             if (!state.currentConfig.providers[providerId]) state.currentConfig.providers[providerId] = {};
             state.currentConfig.providers[providerId].models = newModels;
             renderModelsTable(providerId);
@@ -215,7 +207,7 @@ export async function saveModelsFromTable() {
             }
             alert('模型列表已保存（' + newModels.length + ' 个）');
         } else {
-            alert('保存失败：' + (data.error || '未知错误'));
+            alert('保存失败：' + ((data && data.error) || '未知错误'));
         }
     } catch (e) {
         alert('保存失败：' + e.message);
@@ -239,17 +231,12 @@ export async function saveSettings() {
         default_model: finalModel
     };
     try {
-        const response = await fetch('/api/config/save', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                providers,
-                active_provider: currentEditingProvider,
-                set_initialized: true
-            })
+        const data = await saveConfig({
+            providers,
+            active_provider: currentEditingProvider,
+            set_initialized: true
         });
-        const data = await response.json();
-        if (data.success) {
+        if (data && data.success) {
             state.currentConfig.active_provider = currentEditingProvider;
             state.currentConfig.providers = providers;
             state.currentConfig.initialized = true;
@@ -275,7 +262,7 @@ export async function saveSettings() {
             if (modal) modal.classList.remove('show');
             alert('保存成功！');
         } else {
-            alert('保存失败：' + (data.error || '未知错误'));
+            alert('保存失败：' + ((data && data.error) || '未知错误'));
         }
     } catch (e) {
         alert('保存失败：' + e.message);
@@ -300,15 +287,11 @@ export async function testConnection() {
     btn.innerHTML = '测试中...';
 
     try {
-        // 优先使用 KnowledgeAPI，缺少时回退到原生 fetch
+        // 优先使用 KnowledgeAPI，缺少时回退到 core/api.js 的 testModelConnection
         const api = window.KnowledgeAPI;
         const data = api && typeof api.testModel === 'function'
             ? await api.testModel(providerId, model)
-            : await (await fetch('/api/model/test', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ provider_id: providerId, model })
-            })).json();
+            : await testModelConnection(providerId, model);
 
         if (data && data.success) {
             alert(`✅ 连通成功！\n模型：${data.model || model}\n耗时：${data.latency_ms}ms`);

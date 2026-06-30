@@ -3,14 +3,14 @@
 // 职责：所有全局事件绑定的统一入口 bindEvents()
 // 各子模块的 init/bind 由对应模块导出，本文件聚合调用
 // ============================
-import { bindChartControls } from '../pages/home.js?v=20260618i';
+import { bindChartControls } from '../pages/home.js';
 import {
     bindSidebarEvents,
     bindParentMenuToggles
-} from '../pages/videos.js?v=20260618i';
-import { switchPage, loadFiles, loadAudioFiles, startTasksPolling, stopTasksPolling, clearCompletedTasks, toggleSelectAll, clearSelection, startBatchTranscribe, createFolder, updateSelectedFilesList, uploadFile, uploadByUrl, initUrlUploadInput, analyzeVideo, generateSummary, generateNotes, generateOutline, renameFile, moveFile, deleteSelected, renderModelList, confirmModelSelect, fetchModels, addModelRow, saveModelsFromTable, saveSettings, switchProviderTab, openSettingsModal, openModelSelectModal, testConnection } from '../pages/index-bridge.js?v=20260618i';
-import { debounce } from './utils.js?v=20260618i';
-import { state } from './state.js?v=20260618i';
+} from '../pages/videos.js';
+import { switchPage, loadFiles, loadAudioFiles, startTasksPolling, stopTasksPolling, clearCompletedTasks, toggleSelectAll, clearSelection, startBatchTranscribe, createFolder, updateSelectedFilesList, uploadFile, uploadByUrl, initUrlUploadInput, analyzeVideo, generateSummary, generateNotes, generateOutline, renameFile, moveFile, deleteSelected, renderModelList, confirmModelSelect, fetchModels, addModelRow, saveModelsFromTable, saveSettings, switchProviderTab, openSettingsModal, openModelSelectModal, testConnection } from '../pages/index-bridge.js';
+import { debounce } from './utils.js';
+import { state } from './state.js';
 
 export function bindEvents() {
     // Page navigation

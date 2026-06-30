@@ -3,6 +3,7 @@
 // 职责：视频/音频详情面板、转录、生成总结/笔记/大纲
 // ============================
 import { API_BASE_URL, appConfig } from '../core/config.js';
+import { getAnalysisResult, getTaskStatus, analyzeVideoApi, generateContentApi } from '../core/api.js';
 import { state } from '../core/state.js';
 import { simpleMarkdownToHtml } from '../core/utils.js';
 
@@ -102,9 +103,8 @@ export async function loadAnalysisResults(videoPath) {
     const mediaType = (state.currentVideo && state.currentVideo.media_type) || (isAudioPath(videoPath) ? 'audio' : 'video');
     ['summary', 'notes', 'outline'].forEach(async type => {
         try {
-            const response = await fetch(`${API_BASE_URL}/api/analysis/result?video_path=${encodeURIComponent(videoPath)}&type=${type}&media_type=${mediaType}`);
-            const data = await response.json();
-            if (data.success && data.content) {
+            const data = await getAnalysisResult(videoPath, type, mediaType);
+            if (data && data.success && data.content) {
                 const el = document.getElementById(type + 'Content');
                 if (el) {
                     try {
@@ -121,9 +121,8 @@ export async function loadAnalysisResults(videoPath) {
         } catch (e) {}
     });
     try {
-        const response = await fetch(`${API_BASE_URL}/api/analysis/result?video_path=${encodeURIComponent(videoPath)}&type=subtitle&media_type=${mediaType}`);
-        const data = await response.json();
-        if (data.success && data.content) {
+        const data = await getAnalysisResult(videoPath, 'subtitle', mediaType);
+        if (data && data.success && data.content) {
             const el = document.getElementById('textContent');
             if (el) el.textContent = data.content;
         }
@@ -142,14 +141,11 @@ export async function analyzeVideo() {
         if (btn) btn.disabled = true;
         if (progressFill) progressFill.style.width = '0%';
         if (progressMessage) progressMessage.textContent = '准备开始...';
-        const response = await fetch(`${API_BASE_URL}/api/video/analyze?path=${encodeURIComponent(state.currentVideo.path)}&media_type=${state.currentVideo.media_type || 'video'}`, {
-            method: 'POST'
-        });
-        const data = await response.json();
-        if (data.success && data.task_id) {
+        const data = await analyzeVideoApi(state.currentVideo.path, state.currentVideo.media_type || 'video');
+        if (data && data.success && data.task_id) {
             await pollTaskProgress(data.task_id);
         } else {
-            alert('分析失败: ' + (data.error || '未知错误'));
+            alert('分析失败: ' + ((data && data.error) || '未知错误'));
             if (progressBar) progressBar.style.display = 'none';
             if (progressMessage) progressMessage.style.display = 'none';
             if (btn) btn.disabled = false;
@@ -171,9 +167,8 @@ export async function pollTaskProgress(taskId) {
     try {
         pollInterval = setInterval(async () => {
             try {
-                const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`);
-                const data = await response.json();
-                if (data.success && data.task) {
+                const data = await getTaskStatus(taskId);
+                if (data && data.success && data.task) {
                     const task = data.task;
                     if (progressFill) progressFill.style.width = `${task.progress || 0}%`;
                     if (progressMessage) progressMessage.textContent = task.message || '处理中...';
@@ -214,13 +209,8 @@ async function generateContent(apiPath, contentElId, progressElId, btnElId) {
     try {
         const payload = { video_path: state.currentVideo.path, media_type: state.currentVideo.media_type || 'video' };
         if (appConfig.currentModel) payload.model = appConfig.currentModel;
-        const response = await fetch(`${API_BASE_URL}${apiPath}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        const data = await response.json();
-        if (data.success) {
+        const data = await generateContentApi(apiPath, payload);
+        if (data && data.success) {
             const el = document.getElementById(contentElId);
             if (data.content && el) {
                 try {
@@ -234,7 +224,7 @@ async function generateContent(apiPath, contentElId, progressElId, btnElId) {
                 }
             }
         } else {
-            alert('生成失败: ' + data.error);
+            alert('生成失败: ' + (data && data.error));
         }
     } catch (error) {
         alert('生成失败: ' + error.message);
