@@ -142,33 +142,5 @@ body {
 }
 
 /* ============================
-   响应式样式（全局）
+   响应式样式已迁移至 responsive.css
    ============================ */
-@media (max-width: 768px) {
-    .navbar-inner {
-        padding: 0 16px;
-    }
-
-    .main-content {
-        padding: 16px;
-    }
-
-    .video-page-layout {
-        flex-direction: column;
-    }
-
-    .sidebar {
-        width: 100%;
-        position: static;
-        min-height: auto;
-    }
-
-    .nav-links {
-        gap: 4px;
-    }
-
-    .nav-link {
-        padding: 8px 12px;
-        font-size: 13px;
-    }
-}

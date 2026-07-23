@@ -1,0 +1,419 @@
+/* ============================
+   responsive.css
+   职责：所有移动端/平板断点样式集中地
+   桌面默认无任何副作用
+   断点：≤1023px (tablet) / ≤768px (mobile) / ≤360px (small)
+   ============================ */
+
+/* ============================
+   通用触摸优化（全局生效）
+   ============================ */
+* {
+    -webkit-tap-highlight-color: transparent;
+}
+button, a {
+    touch-action: manipulation;
+}
+
+/* ============================
+   汉堡/抽屉默认（桌面隐藏）
+   ============================ */
+.nav-hamburger {
+    display: none;
+    width: 36px;
+    height: 36px;
+    border: none;
+    background: transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    color: var(--text-primary);
+    margin-right: 8px;
+}
+.nav-hamburger:hover {
+    background: var(--bg-color);
+}
+
+.nav-drawer {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 280px;
+    z-index: 1100;
+    background: var(--card-bg);
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.1);
+    overflow-y: auto;
+    padding: 20px 16px;
+}
+.nav-drawer h3 {
+    font-size: 18px;
+    margin-bottom: 16px;
+    color: var(--text-primary);
+}
+.nav-drawer .nav-link {
+    display: flex;
+    width: 100%;
+    text-align: left;
+    margin-bottom: 8px;
+    padding: 12px 16px;
+    font-size: 15px;
+}
+body.nav-drawer-open .nav-drawer {
+    transform: translateX(0);
+}
+
+.drawer-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 1099;
+    display: none;
+}
+body.nav-drawer-open .drawer-overlay {
+    display: block;
+}
+
+/* 知识库顶部切换按钮（默认桌面隐藏） */
+.kb-sidebar-toggle {
+    display: none;
+}
+
+/* 视频页 sidebar 切换按钮：仅手机尺寸显示 */
+#videoSidebarToggle {
+    display: none;
+}
+
+/* ============================
+   平板 (≤1023px)
+   ============================ */
+@media (max-width: 1023px) {
+    /* 知识库移动端工具条 */
+    .kb-mobile-toolbar {
+        display: flex !important;
+    }
+
+    /* 详情面板改 Bottom Sheet */
+    .detail-panel.is-mobile-sheet {
+        top: auto;
+        right: 0;
+        left: 0;
+        bottom: 0;
+        width: 100%;
+        height: 80vh;
+        max-height: 80vh;
+        border-left: none;
+        border-top: 1px solid var(--border-color);
+        border-radius: 16px 16px 0 0;
+        transform: translateY(100%);
+    }
+    .detail-panel.is-mobile-sheet.show {
+        transform: translateY(0);
+    }
+    .detail-panel.is-mobile-sheet::before {
+        content: '';
+        position: absolute;
+        top: 8px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 36px;
+        height: 4px;
+        background: var(--border-color);
+        border-radius: 2px;
+        z-index: 1;
+    }
+
+    /* 知识库侧栏抽屉化 */
+    .left-panels {
+        position: fixed;
+        top: 64px;
+        left: 0;
+        bottom: 0;
+        z-index: 950;
+        width: 280px;
+        background: var(--card-bg);
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+        box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
+    }
+    .left-panels.is-mobile-open {
+        transform: translateX(0);
+    }
+    .doc-preview {
+        position: fixed;
+        top: 64px;
+        right: 0;
+        bottom: 0;
+        z-index: 940;
+        width: 320px;
+        max-width: 90vw;
+        transform: translateX(100%);
+        transition: transform 0.3s ease;
+        box-shadow: -4px 0 20px rgba(0, 0, 0, 0.15);
+    }
+    .doc-preview.is-mobile-open {
+        transform: translateX(0);
+    }
+    .kb-sidebar-toggle {
+        display: inline-flex;
+    }
+}
+
+/* ============================
+   手机 (≤768px)
+   ============================ */
+@media (max-width: 768px) {
+    #videoSidebarToggle {
+        display: inline-flex;
+    }
+
+    /* navbar 紧凑 */
+    .navbar {
+        padding: 0 12px;
+    }
+    .navbar-inner {
+        height: 56px;
+        padding: 0;
+    }
+    .logo {
+        font-size: 16px;
+        gap: 8px;
+    }
+    .logo span {
+        display: none;
+    }
+    .logo-icon {
+        width: 32px;
+        height: 32px;
+        font-size: 16px;
+    }
+    .nav-links {
+        gap: 4px;
+    }
+    .nav-link {
+        padding: 6px 10px;
+        font-size: 13px;
+    }
+
+    /* 显示汉堡按钮 */
+    .nav-hamburger {
+        display: inline-flex;
+    }
+
+    /* main content 紧凑 padding */
+    .main-content {
+        padding: 12px;
+    }
+
+    /* 视频页 sidebar 抽屉化 */
+    .video-page-layout {
+        flex-direction: column;
+    }
+    .video-page-layout .sidebar {
+        position: fixed;
+        top: 56px;
+        left: 0;
+        bottom: 0;
+        width: 280px;
+        max-width: 85vw;
+        z-index: 920;
+        min-height: auto;
+        border-radius: 0;
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+        box-shadow: 4px 0 20px rgba(0, 0, 0, 0.15);
+    }
+    .video-page-layout .sidebar.is-mobile-open {
+        transform: translateX(0);
+    }
+    .video-page-layout .sidebar.is-mobile-open ~ .video-content-area::before {
+        content: '';
+        position: fixed;
+        inset: 56px 0 0 0;
+        background: rgba(0, 0, 0, 0.4);
+        z-index: 910;
+    }
+
+    /* 首页 welcome 改竖排 */
+    .home-welcome {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 20px;
+    }
+    .welcome-title {
+        font-size: 22px;
+    }
+    .welcome-subtitle {
+        font-size: 14px;
+    }
+    .quick-actions {
+        width: 100%;
+        flex-wrap: wrap;
+        margin-top: 12px;
+    }
+    .action-card {
+        flex: 1 1 calc(50% - 6px);
+        padding: 12px 8px;
+        font-size: 13px;
+    }
+    .action-icon {
+        font-size: 22px;
+    }
+
+    /* 统计卡缩小 */
+    .stat-card {
+        padding: 16px;
+    }
+    .stat-value {
+        font-size: 24px;
+    }
+    .stat-icon {
+        width: 40px;
+        height: 40px;
+        font-size: 20px;
+    }
+
+    /* 图表网格单列 */
+    .charts-grid {
+        grid-template-columns: 1fr;
+    }
+    .chart-body {
+        height: 200px;
+    }
+
+    /* 顶栏工具栏改竖排 */
+    .top-bar {
+        flex-direction: column;
+        gap: 8px;
+        align-items: stretch;
+        padding: 12px;
+    }
+    .top-bar .path-nav {
+        font-size: 13px;
+        flex-wrap: wrap;
+    }
+    .top-actions {
+        width: 100%;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+    .top-actions .btn {
+        flex: 1 1 auto;
+        min-width: 0;
+        padding: 8px 10px;
+    }
+    .top-actions .btn-label {
+        font-size: 13px;
+    }
+
+    .toolbar {
+        flex-direction: column;
+        gap: 8px;
+        align-items: stretch;
+        padding: 10px 12px;
+    }
+    .search-box {
+        width: 100%;
+    }
+
+    /* 列表视图：列减少，隐藏次要列 */
+    .list-header,
+    .list-item {
+        grid-template-columns: 32px 1fr 80px;
+    }
+    .list-header > :nth-child(3),
+    .list-header > :nth-child(4),
+    .list-header > :nth-child(5),
+    .list-item > :nth-child(3),
+    .list-item > :nth-child(4),
+    .list-item > :nth-child(5) {
+        display: none;
+    }
+
+    /* 卡片视图更紧凑 */
+    .cards-view {
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: 12px;
+    }
+    .card-thumbnail {
+        height: 110px;
+    }
+
+    /* 模态框自适应 */
+    .modal {
+        max-width: 92vw;
+        max-height: 90vh;
+    }
+    .modal-header,
+    .modal-footer,
+    .modal-body {
+        padding-left: 16px;
+        padding-right: 16px;
+    }
+    .modal-body {
+        padding-top: 16px;
+        padding-bottom: 16px;
+    }
+
+    /* 批量工具栏改竖排 */
+    .batch-toolbar {
+        flex-wrap: wrap;
+        gap: 8px !important;
+    }
+    .batch-toolbar > * {
+        flex: 1 1 calc(50% - 4px);
+    }
+
+    /* url-list-item 改竖排 */
+    .url-list-item {
+        flex-wrap: wrap;
+    }
+    .url-item-main {
+        width: 100%;
+    }
+    .url-item-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+
+    /* 任务中心模态框更紧凑 */
+    #modalTasks .modal {
+        max-width: 95vw;
+    }
+    #tasksList {
+        max-height: 65vh;
+    }
+}
+
+/* ============================
+   小屏 (≤360px)
+   ============================ */
+@media (max-width: 360px) {
+    .stat-card {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+    .stat-value {
+        font-size: 22px;
+    }
+    .nav-link {
+        padding: 6px 8px;
+    }
+    .welcome-title {
+        font-size: 20px;
+    }
+    .quick-actions {
+        gap: 6px;
+    }
+    .action-card {
+        flex: 1 1 100%;
+    }
+    .cards-view {
+        grid-template-columns: 1fr;
+    }
+}

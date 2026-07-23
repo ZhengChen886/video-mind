@@ -5,6 +5,7 @@
 // ============================
 import { bindEvents } from './core/events.js';
 import { loadAppConfig } from './core/config.js';
+import { initResponsive } from './core/responsive.js';
 import { initHome } from './pages/home.js';
 import { initUserMenu } from './modal/user_menu.js';
 import { initProfileModal } from './modal/profile.js';
@@ -33,6 +34,7 @@ window.finishWelcomeSetup = finishWelcomeSetup;
 document.addEventListener('DOMContentLoaded', () => {
     loadAppConfig();
     bindEvents();
+    initResponsive();
     initHome();
     initUserMenu();
     initProfileModal();

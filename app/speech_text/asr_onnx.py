@@ -8,11 +8,11 @@ from dataclasses import dataclass
 
 
 # 设置 ModelScope 和 HuggingFace 缓存目录（使用本地已下载的模型）
-os.environ["MODELSCOPE_CACHE"] = r"F:\temp\modelscope"
-os.environ["HF_HOME"] = r"F:\temp\modelscope"
+os.environ["MODELSCOPE_CACHE"] = r"F:\tmp\temp\modelscope"
+os.environ["HF_HOME"] = r"F:\tmp\temp\modelscope"
 
 # 使用 ModelScope 格式的完整模型路径（有 model.pt）
-LOCAL_MODEL_PATH = r"F:\temp\modelscope\models\iic\SenseVoiceSmall"
+LOCAL_MODEL_PATH = r"F:\tmp\temp\modelscope\models\iic\SenseVoiceSmall"
 
 # ============================================
 # 智能分段配置

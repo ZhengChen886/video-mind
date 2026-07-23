@@ -446,8 +446,9 @@ app.include_router(dashboard_router)
 async def home(request: Request):
     """主页（方案 F'：注入 BUILD_ID，HTML 入口永远走协商缓存）"""
     response = templates.TemplateResponse(
+        request,
         "index.html",
-        {"request": request, "build_id": BUILD_ID},
+        {"build_id": BUILD_ID},
     )
     # 入口 HTML 必须每次回服务器校验，确保 ?v=BUILD_ID 拿到最新值
     response.headers["Cache-Control"] = "no-cache, must-revalidate"

@@ -13,12 +13,14 @@
     <link rel="stylesheet" href="/static/css/pages/home.css?v={{ build_id }}">
     <link rel="stylesheet" href="/static/css/pages/videos.css?v={{ build_id }}">
     <link rel="stylesheet" href="/static/js/pages/knowledge/styles/knowledge.css?v={{ build_id }}">
+    <link rel="stylesheet" href="/static/css/responsive.css?v={{ build_id }}">
 </head>
 <body>
     <div class="main-wrapper">
         <!-- Top Navigation -->
         <nav class="navbar">
             <div class="navbar-inner">
+                <button class="nav-hamburger" id="navHamburger" aria-label="打开菜单">☰</button>
                 <div class="logo">
                     <div class="logo-icon">🤖</div>
                     <span>VideoMind</span>
@@ -33,6 +35,15 @@
                 </div>
             </div>
         </nav>
+
+        <!-- 移动端导航抽屉 -->
+        <div class="nav-drawer" id="navDrawer">
+            <h3>导航</h3>
+            <button class="nav-link" data-page="home" data-nav-drawer>首页</button>
+            <button class="nav-link" data-page="videos" data-nav-drawer>我的视频</button>
+            <button class="nav-link" data-page="knowledge" data-nav-drawer>知识库</button>
+        </div>
+        <div class="drawer-overlay" id="drawerOverlay"></div>
 
         <!-- Main Content -->
         <main class="main-content">
@@ -341,6 +352,7 @@
                     <div class="video-content-area" style="flex:1;min-width:0">
                         <div class="top-bar">
                             <div class="path-nav">
+                                <button class="btn-icon kb-sidebar-toggle" id="videoSidebarToggle" aria-label="打开目录" style="margin-right:8px">☰</button>
                                 <span>视频库</span>
                                 <svg viewBox="0 0 24 24" style="width:14px;height:14px;margin:0 8px" fill="currentColor">
                                     <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/>
@@ -1025,6 +1037,11 @@
             <!-- 主内容区：聊天区域（向上扩展，占据中间） -->
             <main class="knowledge-main">
                 <div id="chat-area" class="chat-area">
+                    <!-- 知识库移动端工具条（仅窄屏显示） -->
+                    <div class="kb-mobile-toolbar" style="display:none;padding:8px 12px;border-bottom:1px solid var(--border-color);gap:8px;align-items:center;background:var(--card-bg)">
+                        <button class="btn-icon kb-sidebar-toggle" id="kbSidebarToggle" aria-label="打开分组" style="background:transparent;color:var(--text-primary);border:1px solid var(--border-color)">☰</button>
+                        <span style="font-size:14px;color:var(--text-secondary)">知识库</span>
+                    </div>
                     <div id="chat-messages" class="chat-messages">
                         <div class="empty-hint">请先在左侧选择一个文档</div>
                     </div>
