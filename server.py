@@ -77,6 +77,7 @@ from app.text_summary.content_analyzer import (
 
 from app.routes.knowledge import router as knowledge_router
 from app.routes.dashboard import router as dashboard_router
+from app.routes.tools import router as tools_router
 import os
 import time
 
@@ -437,6 +438,9 @@ app.include_router(knowledge_router)
 
 # 注册仪表盘路由
 app.include_router(dashboard_router)
+
+# 注册工具路由（第一财经视频链接获取等）
+app.include_router(tools_router)
 
 # ============================================================
 # 主页路由

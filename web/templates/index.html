@@ -598,20 +598,12 @@
             </div>
             <div class="modal-body">
                 <div class="form-group" style="display: flex; gap: 8px; align-items: center;">
-                    <input type="text" id="urlExtractInput" placeholder="输入包含视频的网页URL" style="flex: 1; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px;">
-                    <button type="button" id="btnExtractFromUrl" class="btn btn-primary" style="white-space: nowrap;">从URL提取</button>
+                    <input type="text" id="yicaiDateInput" placeholder="第一财经日期 MMDD，如 0723" maxlength="4" style="flex: 1; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px;">
+                    <button type="button" id="btnYicaiFetch" class="btn btn-primary" style="white-space: nowrap;">从第一财经获取</button>
                 </div>
                 <div class="form-group">
                     <label>视频链接（每行一个链接）</label>
                     <textarea id="urlUploadInput" rows="5" placeholder="请输入视频链接，每行一个&#10;例如：&#10;https://xxx.com/video1.mp4&#10;https://xxx.com/video2.mp4" style="width:100%;padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:14px;resize:vertical"></textarea>
-                </div>
-                <div id="webVideoExtractResults" style="display: none; margin-top: 12px;">
-                    <div style="font-weight: bold; margin-bottom: 8px;">提取到的视频：</div>
-                    <div id="webVideoList"></div>
-                    <div style="margin-top: 12px;">
-                        <button type="button" id="btnSelectAllVideos" class="btn btn-secondary btn-sm">全选</button>
-                        <button type="button" id="btnFillSelectedVideos" class="btn btn-primary btn-sm">填充选中链接</button>
-                    </div>
                 </div>
                 <div class="form-group">
                     <label>目标目录</label>
@@ -1159,7 +1151,7 @@
     <!-- Knowledge API 由 app.js 内的 initKnowledgeApp 触发，单独 script 加载以确保 window.KnowledgeAPI 就绪 -->
     <script src="/static/js/pages/knowledge/api.js?v={{ build_id }}"></script>
     <!-- 知识库 UI 子工具（保持原 script 顺序以兼容现有交互） -->
-    <script src="/static/js/pages/knowledge/video_extractor_ui.js?v={{ build_id }}"></script>
+    <script type="module" src="/static/js/pages/knowledge/yicai_fetcher_ui.js?v={{ build_id }}"></script>
 
     <!-- 侧边栏 sidebar-user 下拉菜单（position: fixed 避免被 overflow 容器裁剪） -->
     <div class="user-dropdown sidebar-user-dropdown" id="sidebarUserDropdown">
