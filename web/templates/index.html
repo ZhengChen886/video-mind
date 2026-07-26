@@ -598,8 +598,14 @@
             </div>
             <div class="modal-body">
                 <div class="form-group" style="display: flex; gap: 8px; align-items: center;">
-                    <input type="text" id="yicaiDateInput" placeholder="第一财经日期 YYYYMMDD，如 20260724（仅输入 MMDD 时默认本年）" maxlength="8" inputmode="numeric" pattern="\d{4}|\d{8}" style="flex: 1; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px;">
-                    <button type="button" id="btnYicaiFetch" class="btn btn-primary" style="white-space: nowrap;">从第一财经获取</button>
+                    <select id="platformSelect" style="flex: 1; min-width: 0; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px; background: #fff; box-sizing: border-box;">
+                        <!-- 由 platform_fetcher_ui.js 启动时从 /api/tools/platforms 拉取填充 -->
+                    </select>
+                    <button type="button" id="btnPlatformConfig" class="btn btn-primary" style="flex-shrink: 0; white-space: nowrap; display: none;" title="配置 Cookie / 查看使用方法">⚙ 配置</button>
+                </div>
+                <div class="form-group" style="display: flex; gap: 8px; align-items: center;">
+                    <input type="text" id="platformInput" placeholder="加载中…" maxlength="8" inputmode="text" style="flex: 1; min-width: 0; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px; box-sizing: border-box;">
+                    <button type="button" id="btnPlatformFetch" class="btn btn-primary" style="white-space: nowrap; flex-shrink: 0;">获取链接</button>
                 </div>
                 <div class="form-group">
                     <label>视频链接（每行一个链接）</label>
@@ -632,6 +638,34 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary" id="cancelUrlUpload">取消</button>
                 <button class="btn btn-primary" id="confirmUrlUpload" disabled>批量下载</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="modalPlatformConfig">
+        <div class="modal" style="width: 560px">
+            <div class="modal-header" style="justify-content: space-between;">
+                <button class="modal-back" id="btnConfigBack" title="返回链接下载" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:14px;padding:0;margin-right:8px;">← 返回</button>
+                <span id="platformConfigTitle" style="flex:1">平台配置</span>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div style="display:flex; gap:8px; margin-bottom:16px;">
+                    <button type="button" class="btn btn-primary config-tab" data-tab="cookie" style="flex:1;">Cookie 配置</button>
+                    <button type="button" class="btn btn-secondary config-tab" data-tab="usage" style="flex:1;">使用方法</button>
+                </div>
+                <div class="config-panel" data-panel="cookie">
+                    <div id="cookieStatus" style="margin-bottom: 10px; padding: 10px 12px; background: #f7fafc; border-radius: 6px; font-size: 13px; color: #4a5568;">加载中…</div>
+                    <textarea id="cookieInput" rows="8" placeholder="请粘贴从浏览器开发者工具中复制的 Cookie 字符串…" style="width: 100%; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13px; font-family: ui-monospace, monospace; resize: vertical; box-sizing: border-box;"></textarea>
+                    <div style="display: flex; gap: 8px; margin-top: 10px;">
+                        <button type="button" id="btnSaveCookie" class="btn btn-primary" style="flex:1;">保存</button>
+                        <button type="button" id="btnClearCookie" class="btn btn-secondary" style="flex:1;">清空</button>
+                    </div>
+                    <div style="margin-top: 10px; font-size: 12px; color: #94a3b8;">提示：新保存的 Cookie 将在下次启动服务时生效</div>
+                </div>
+                <div class="config-panel" data-panel="usage" style="display: none;">
+                    <div id="usageContent" style="font-size: 13px; line-height: 1.7; color: #2d3748;"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -1151,7 +1185,8 @@
     <!-- Knowledge API 由 app.js 内的 initKnowledgeApp 触发，单独 script 加载以确保 window.KnowledgeAPI 就绪 -->
     <script src="/static/js/pages/knowledge/api.js?v={{ build_id }}"></script>
     <!-- 知识库 UI 子工具（保持原 script 顺序以兼容现有交互） -->
-    <script type="module" src="/static/js/pages/knowledge/yicai_fetcher_ui.js?v={{ build_id }}"></script>
+    <script type="module" src="/static/js/pages/knowledge/platform_fetcher_ui.js?v={{ build_id }}"></script>
+    <script type="module" src="/static/js/pages/knowledge/platform_config_modal.js?v={{ build_id }}"></script>
 
     <!-- 侧边栏 sidebar-user 下拉菜单（position: fixed 避免被 overflow 容器裁剪） -->
     <div class="user-dropdown sidebar-user-dropdown" id="sidebarUserDropdown">

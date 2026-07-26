@@ -446,6 +446,14 @@ app.include_router(tools_router)
 # 主页路由
 # ============================================================
 
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    """静默处理 favicon 请求，避免 404 噪声日志。
+    浏览器默认每个页面都会请求 favicon.ico，返回 204 让浏览器停止重试。"""
+    from fastapi.responses import Response
+    return Response(status_code=204)
+
+
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     """主页（方案 F'：注入 BUILD_ID，HTML 入口永远走协商缓存）"""

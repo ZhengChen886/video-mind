@@ -141,6 +141,12 @@ body {
     font-size: 13px;
 }
 
+/* 链接下载弹窗按钮对齐 */
+.btn.btn-primary[style*="white-space: nowrap"] {
+    min-width: 100px;
+    justify-content: center;
+}
+
 /* ============================
    响应式样式已迁移至 responsive.css
    ============================ */

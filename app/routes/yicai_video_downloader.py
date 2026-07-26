@@ -303,12 +303,19 @@ def main():
     success = sum(1 for r in results if r["status"] == "200")
     print(f"---\n统计: 成功 {success}/{len(results)}, 失败 {len(results) - success}")
 
-    # stderr 输出 name+url 段（供 tools.py 解析）
+    # stderr 输出 name+url 段（供旧版 tools.py 解析；新版走 stdout JSON）
     print(f"\n[name+url文本输出]", file=sys.stderr)
     for r in results:
         print(f"{r['name']}", file=sys.stderr)
         print(f"{r['url']}", file=sys.stderr)
         print(file=sys.stderr)
+
+    # stdout 输出 JSON（统一契约，供 /api/tools/fetch 解析）
+    print(json.dumps({
+        "items": [{"name": r["name"], "url": r["url"]} for r in results],
+        "date": date_str,
+        "count": len(results),
+    }, ensure_ascii=False))
 
 
 if __name__ == "__main__":
