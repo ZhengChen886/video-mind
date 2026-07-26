@@ -12,10 +12,16 @@ async function fetchYicai() {
     const btn = document.getElementById('btnYicaiFetch');
     if (!input || !btn) return;
 
-    const date = (input.value || '').trim();
-    if (!/^\d{4}$/.test(date)) {
-        alert('日期格式错误，请输入 4 位数字 MMDD，如 0723');
+    let date = (input.value || '').trim();
+    if (!/^\d{4}$|^\d{8}$/.test(date)) {
+        alert('日期格式错误，请输入 YYYYMMDD（如 20260724）或 MMDD（如 0723，将默认补本年）');
         return;
+    }
+    // 仅输入 MMDD 时，自动用当前年份补全为 YYYYMMDD
+    if (date.length === 4) {
+        const yyyy = new Date().getFullYear();
+        date = `${yyyy}${date}`;
+        input.value = date;
     }
 
     const originalText = btn.textContent;
@@ -42,16 +48,23 @@ async function fetchYicai() {
             return;
         }
 
-        // 1) 写入 state（保持 url + filename 结构）
-        state.urlDownloadItems = items.map(it => ({
-            url: it.url,
-            filename: it.name || (it.url.split('/').pop() || 'video.mp4'),
-        }));
+        // 1) 叠加写入 state（按 url 去重，保留已有项）
+        const existing = Array.isArray(state.urlDownloadItems) ? state.urlDownloadItems : [];
+        const existingUrls = new Set(existing.map(i => i.url));
+        const newItems = items
+            .filter(it => it.url && !existingUrls.has(it.url))
+            .map(it => ({
+                url: it.url,
+                filename: it.name || (it.url.split('/').pop() || 'video.mp4'),
+            }));
+        state.urlDownloadItems = existing.concat(newItems);
 
-        // 2) 同步 textarea（让现有 input 监听也能识别）
+        // 2) 同步 textarea（叠加，不覆盖）
         const textarea = document.getElementById('urlUploadInput');
         if (textarea) {
-            textarea.value = state.urlDownloadItems.map(i => i.url).join('\n');
+            const existingText = (textarea.value || '').trim();
+            const newText = newItems.map(i => i.url).join('\n');
+            textarea.value = existingText ? `${existingText}\n${newText}` : newText;
         }
 
         // 3) 显式渲染列表（避免依赖 input 事件触发时机）

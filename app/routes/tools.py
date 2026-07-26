@@ -55,10 +55,13 @@ async def yicai_fetch(req: YicaiFetchRequest):
     调用 .trae/tool/yicai_video_downloader.py 获取指定日期的第一财经视频链接
     """
     date = (req.date or "").strip()
-    if not re.match(r"^\d{4}$", date):
+    if not re.match(r"^\d{4}$|^\d{8}$", date):
         return JSONResponse(
             status_code=400,
-            content={"success": False, "error": "日期格式错误，应为 MMDD 4 位数字，如 0723"},
+            content={
+                "success": False,
+                "error": "日期格式错误，应为 MMDD（如 0723）或 YYYYMMDD（如 20250723）",
+            },
         )
 
     if not SCRIPT_PATH.exists():
