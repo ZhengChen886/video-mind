@@ -53,8 +53,13 @@ class BilibiliDownloader(Downloader):
         """
         if skip_download:
             # 解析模式：单流，避免 DASH 合并导致 info['url'] 为空
-            fmt = "best[height<=720][ext=mp4]/best[ext=mp4]/best[height<=720]/bestvideo[height<=720]/best"
-            final_ext = "mp4"
+            # need_video 决定是取视频流还是音频流
+            if need_video:
+                fmt = "best[height<=720][ext=mp4]/best[ext=mp4]/best[height<=720]/bestvideo[height<=720]/best"
+                final_ext = "mp4"
+            else:
+                fmt = "bestaudio[ext=m4a]/bestaudio/best"
+                final_ext = "mp3"  # 名称用 mp3（与下载后 FFmpeg 转码输出一致）
         elif need_video:
             # 下载模式：DASH 合并 720p → 单文件 720p mp4 → 任意最佳 mp4
             fmt = "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=720]+bestaudio/best[height<=720][ext=mp4]/best[ext=mp4]/best"
@@ -106,7 +111,11 @@ class BilibiliDownloader(Downloader):
             direct_url = info.get("url")
             if not direct_url:
                 raise ValueError("yt-dlp 未返回 url 字段")
-            ext = info.get("ext") or final_ext
+            # need_video=False 时强制用 final_ext（避免 yt-dlp 返回 m4a 时污染为 m4a）
+            if need_video:
+                ext = info.get("ext") or final_ext
+            else:
+                ext = final_ext
             title = info.get("title", "video")
             safe_title = _re.sub(r'[\\/:*?"<>|]', '_', title)[:80]
             return AudioDownloadResult(

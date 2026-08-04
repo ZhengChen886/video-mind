@@ -192,7 +192,7 @@ class DouyinDownloader(Downloader):
                 last_error = e
                 err_msg = str(e).lower()
                 if 'cookies' in err_msg or 'login' in err_msg or 'sign in' in err_msg or 'fresh' in err_msg:
-                    print(f"[DouyinDownloader] {label}下载失败（需Cookie/登录）: {e}")
+                    logger.warning("[DouyinDownloader] %s 下载失败（需 Cookie/登录）: %s", label, e)
                     continue
                 # 其他错误直接抛出
                 raise

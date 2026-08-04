@@ -16,6 +16,7 @@ import sys
 import re
 import json
 import subprocess
+from datetime import date, timedelta
 
 # 强制 stdout/stderr 使用 UTF-8（Windows 默认 GBK 无法编码 emoji）
 try:
@@ -111,16 +112,76 @@ def _extract_embedded_json(html):
     return items
 
 
-def _date_in_pubdate(pub_date, mm, dd, yyyy=None):
+def _date_in_pubdate(pub_date, mm, dd, yyyy=None, today=None):
     """
     检查 pubDate 是否匹配 MMDD（可选 YYYY）。
-    pubDate 形如 '2025-12-15 19:16' 或 '2025-12-15T19:16:00'
+    pubDate 形如（任选其一）:
+      - '2026-08-03 21:46' 或 '2026-08-03T21:46:47' (绝对)
+      - '07-31 21:56' (MM-DD 缩写,年取 today.year 或 yyyy)
+      - '8月3日 21:46' (中文)
+      - '昨天 21:46' / '今天 10:00' / '前天 12:00' / '刚刚' / '30分钟前' / '3小时前' (相对)
+    today: 用于解析相对日期的"今天";默认 datetime.date.today()
     """
     if not pub_date:
         return False
-    if yyyy and not pub_date.startswith(f"{yyyy}-"):
+    s = pub_date.strip()
+    if not s:
         return False
-    return (f"-{mm}-{dd} " in pub_date) or (f"-{mm}-{dd}T" in pub_date) or (f"{int(mm)}月{int(dd)}日" in pub_date)
+
+    if today is None:
+        today = date.today()
+    try:
+        target_year = int(yyyy) if yyyy else today.year
+        mm_i, dd_i = int(mm), int(dd)
+        target = date(target_year, mm_i, dd_i)
+    except (ValueError, TypeError):
+        return False
+
+    # 1) 相对时间: 昨天 / 今天 / 前天 / 刚刚 / X分钟前 / X小时前
+    rel_date = None
+    if s.startswith(("昨天", "昨日")):
+        rel_date = today - timedelta(days=1)
+    elif s.startswith(("前天", "前日")):
+        rel_date = today - timedelta(days=2)
+    elif s.startswith(("今天", "今日")):
+        rel_date = today
+    elif s == "刚刚" or "分钟前" in s or "小时前" in s or re.match(r'^\d+\s*秒前$', s):
+        rel_date = today
+    if rel_date is not None:
+        if yyyy and rel_date.year != target_year:
+            return False
+        return rel_date == target
+
+    # 2) 绝对日期: 2026-08-03 21:46 / 2026-08-03T21:46:47
+    m = re.search(r'(\d{4})-(\d{1,2})-(\d{1,2})', s)
+    if m:
+        try:
+            d = date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        except ValueError:
+            return False
+        if yyyy and d.year != int(yyyy):
+            return False
+        return d == target
+
+    # 3) MM-DD 缩写: 07-31 21:56 (默认按 today.year;yyyy 限定则按 target_year)
+    m = re.match(r'^(\d{1,2})-(\d{1,2})\b', s)
+    if m:
+        try:
+            d = date(target_year, int(m.group(1)), int(m.group(2)))
+        except ValueError:
+            return False
+        return d == target
+
+    # 4) 中文: 8月3日 21:46
+    m = re.search(r'(\d{1,2})\s*月\s*(\d{1,2})\s*日', s)
+    if m:
+        try:
+            d = date(target_year, int(m.group(1)), int(m.group(2)))
+        except ValueError:
+            return False
+        return d == target
+
+    return False
 
 
 def find_video_in_json(items, date_str, title_prefix):
@@ -173,7 +234,8 @@ def find_video_url_for_date(html, date_str, title_prefix):
     # 结构: <a href="/video/XXX.html"...><h2>栏目标题MMDD丨...</h2></a>
 
     # B1: 直接定位 <h2>...</h2>
-    h2_match = re.search(rf'<h2[^>]*>([^<]*?{date_short}[丨|][^<]*?)</h2>', html)
+    # 分隔符兼容: 丨(U+4E28) / ｜(U+FF5C 全角竖线) / |(半角)
+    h2_match = re.search(rf'<h2[^>]*>([^<]*?{date_short}[丨｜|][^<]*?)</h2>', html)
     if h2_match:
         title = h2_match.group(1).strip()
         search_region = html[max(0, h2_match.start() - 500):h2_match.start()]
@@ -181,12 +243,13 @@ def find_video_url_for_date(html, date_str, title_prefix):
         if link_match:
             return f"https://www.yicai.com{link_match.group(1)}", title, None
 
-    # B2: 找所有 /video/XXX.html 链接附近包含 MMDD丨 的文本
+    # B2: 找所有 /video/XXX.html 链接附近包含 MMDD + 分隔符 的文本
+    # 分隔符兼容: 丨(U+4E28) / ｜(U+FF5C 全角竖线) / |(半角)
     for path in re.findall(r'href="(/video/\d+\.html)"', html):
         chunk = html[html.find(path) + len(path):][:600]
-        if date_short in chunk and ('丨' in chunk or '|' in chunk):
-            m = re.search(rf'<h2[^>]*>([^<]*?{date_short}[丨|][^<]*?)</h2>', chunk) \
-                or re.search(rf'([^<>]*?{date_short}[丨|][^<>]*?)', chunk)
+        if date_short in chunk and ('丨' in chunk or '｜' in chunk or '|' in chunk):
+            m = re.search(rf'<h2[^>]*>([^<]*?{date_short}[丨｜|][^<]*?)</h2>', chunk) \
+                or re.search(rf'([^<>]*?{date_short}[丨｜|][^<>]*?)', chunk)
             if m:
                 title = re.sub(r'\s+', ' ', m.group(1)).strip()
                 return f"https://www.yicai.com{path}", title, None
@@ -285,23 +348,23 @@ def main():
         if r:
             results.append(r)
 
-    print(f"\n{sep}")
-    print(f"📺 {date_str}日 视频下载链接汇总")
-    print(sep)
+    print(f"\n{sep}", file=sys.stderr)
+    print(f"📺 {date_str}日 视频下载链接汇总", file=sys.stderr)
+    print(sep, file=sys.stderr)
 
     if not results:
-        print("\n⚠️ 未找到任何视频链接")
+        print("\n⚠️ 未找到任何视频链接", file=sys.stderr)
         sys.exit(0)
 
-    print(f"\n### {date_str[:4]}年{date_str[4:6] if len(date_str) == 8 else date_str[:2]}月{date_str[6:8] if len(date_str) == 8 else date_str[2:]}日\n")
+    print(f"\n### {date_str[:4]}年{date_str[4:6] if len(date_str) == 8 else date_str[:2]}月{date_str[6:8] if len(date_str) == 8 else date_str[2:]}日\n", file=sys.stderr)
     for r in results:
         status_tag = "" if r["status"] == "200" else f" [HTTP {r['status']}]"
-        print(f"**{r['name']}**{status_tag}")
-        print(f"{r['url']}")
-        print()
+        print(f"**{r['name']}**{status_tag}", file=sys.stderr)
+        print(f"{r['url']}", file=sys.stderr)
+        print(file=sys.stderr)
 
     success = sum(1 for r in results if r["status"] == "200")
-    print(f"---\n统计: 成功 {success}/{len(results)}, 失败 {len(results) - success}")
+    print(f"---\n统计: 成功 {success}/{len(results)}, 失败 {len(results) - success}", file=sys.stderr)
 
     # stderr 输出 name+url 段（供旧版 tools.py 解析；新版走 stdout JSON）
     print(f"\n[name+url文本输出]", file=sys.stderr)
