@@ -4,15 +4,41 @@ import time
 import soundfile as sf
 import numpy as np
 from dataclasses import dataclass
+from pathlib import Path
+import json
 
 
+# 路径统一从 config/app_paths.json 读取,不再硬编码兜底
+# 配置缺失/字段错误直接抛出,由 start_with.bat 引导用户配置
+_PATHS_JSON = Path(__file__).resolve().parent.parent.parent / "config" / "app_paths.json"
+if not _PATHS_JSON.is_file():
+    raise FileNotFoundError(
+        f"[asr_onnx] 配置文件不存在: {_PATHS_JSON}\n"
+        f"请先双击运行 start_with.bat 完成首次配置"
+    )
 
-# 设置 ModelScope 和 HuggingFace 缓存目录（使用本地已下载的模型）
-os.environ["MODELSCOPE_CACHE"] = r"F:\tmp\temp\modelscope"
-os.environ["HF_HOME"] = r"F:\tmp\temp\modelscope"
+try:
+    _cfg = json.loads(_PATHS_JSON.read_text(encoding="utf-8"))
+except (OSError, ValueError) as e:
+    raise RuntimeError(f"[asr_onnx] 配置文件解析失败: {_PATHS_JSON} - {e}") from e
 
-# 使用 ModelScope 格式的完整模型路径（有 model.pt）
-LOCAL_MODEL_PATH = r"F:\tmp\temp\modelscope\models\iic\SenseVoiceSmall"
+_ms = _cfg.get("modelscope") or {}
+_CACHE = _ms.get("cache_dir")
+_HF_HOME = _ms.get("hf_home")
+_MODEL_DIR = _ms.get("asr_model_dir")
+
+if not _CACHE or not _MODEL_DIR:
+    raise RuntimeError(
+        f"[asr_onnx] 配置缺少必要字段 modelscope.cache_dir / modelscope.asr_model_dir\n"
+        f"请检查 {_PATHS_JSON},或删除后重新运行 start_with.bat"
+    )
+
+# 设置 ModelScope 和 HuggingFace 缓存目录
+os.environ["MODELSCOPE_CACHE"] = _CACHE
+os.environ["HF_HOME"] = _HF_HOME or _CACHE
+
+# ASR 模型完整路径
+LOCAL_MODEL_PATH = _MODEL_DIR
 
 # ============================================
 # 智能分段配置

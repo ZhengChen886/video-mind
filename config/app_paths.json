@@ -1,0 +1,13 @@
+{
+  "python": {
+    "exe": ""
+  },
+  "ffmpeg": {
+    "bin_dir": ""
+  },
+  "modelscope": {
+    "cache_dir": "",
+    "hf_home": "",
+    "asr_model_dir": ""
+  }
+}

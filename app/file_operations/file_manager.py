@@ -2,6 +2,7 @@ import os
 import shutil
 import subprocess
 import uuid
+import json
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from .video_processor import get_video_duration
@@ -18,6 +19,69 @@ MEDIA_EXTENSIONS = SUPPORTED_VIDEO_EXTENSIONS | SUPPORTED_AUDIO_EXTENSIONS
 
 # 支持的文档格式
 SUPPORTED_DOCUMENT_EXTENSIONS = {".md", ".pdf", ".doc", ".docx", ".txt", ".xls", ".xlsx", ".ppt", ".pptx", ".rtf", ".odt"}
+
+
+# ============================================================
+# FFmpeg 路径解析
+# 优先级：config/app_paths.json (ffmpeg.bin_dir) > 系统 PATH > 兜底目录
+# 解析为绝对路径，subprocess.run 调 ffmpeg 时不再依赖 PATH
+# ============================================================
+_FALLBACK_FFMPEG_DIRS = [
+    r"F:\work-tool\ffmpeg\bin",
+]
+
+
+def _build_ffmpeg_headers(url: str) -> str:
+    """
+    根据 URL 域名构造 ffmpeg -headers 字符串。
+    - bilivideo.com / bilibili.com → 必须带 Referer: https://www.bilibili.com
+    - 其它源 → User-Agent 兜底
+    """
+    headers = []
+    lower = (url or "").lower()
+    if "bilivideo.com" in lower or "bilibili.com" in lower:
+        headers.append("Referer: https://www.bilibili.com")
+        headers.append("User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+    else:
+        headers.append("User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+    # ffmpeg -headers 要求每行以 \r\n 结尾
+    return "\r\n".join(headers) + "\r\n"
+
+
+def get_ffmpeg_path() -> Optional[str]:
+    """
+    解析 ffmpeg.exe 的绝对路径。
+
+    查找顺序：
+      1. config/app_paths.json 中的 ffmpeg.bin_dir
+      2. PATH 环境变量（shutil.which）
+      3. _FALLBACK_FFMPEG_DIRS 兜底目录
+
+    找不到返回 None。
+    """
+    # 1) JSON 配置
+    try:
+        cfg = Path(__file__).resolve().parent.parent / "config" / "app_paths.json"
+        if cfg.is_file():
+            data = json.loads(cfg.read_text(encoding="utf-8"))
+            saved = (data.get("ffmpeg") or {}).get("bin_dir", "").strip()
+            if saved and (Path(saved) / "ffmpeg.exe").is_file():
+                return str(Path(saved) / "ffmpeg.exe")
+    except (OSError, ValueError):
+        pass
+
+    # 2) PATH
+    found = shutil.which("ffmpeg")
+    if found:
+        return found
+
+    # 3) 兜底目录
+    for d in _FALLBACK_FFMPEG_DIRS:
+        candidate = Path(d) / "ffmpeg.exe"
+        if candidate.is_file():
+            return str(candidate)
+
+    return None
 
 
 def is_audio_file(path) -> bool:
@@ -450,7 +514,7 @@ def save_url_file(url: str, target_dir: str = "", filename: str = "", media_type
         url: 媒体文件URL
         target_dir: 目标目录相对路径
         filename: 自定义文件名（可选，不填则从URL自动提取）
-        media_type: 媒体类型，决定根目录
+        media_type: 媒体类型，决定根目录（'video' → data/mp4，'audio' → data/mp3）
 
     Returns:
         包含下载结果的字典，包含 success, file_path, filename, error 等字段
@@ -464,7 +528,8 @@ def save_url_file(url: str, target_dir: str = "", filename: str = "", media_type
         allowed_exts = ["mp3", "m4a", "wav", "flac", "ogg", "aac"]
         default_ext = "mp3"
     else:
-        allowed_exts = ["mp4", "m4s", "webm", "mov", "avi", "mkv"]
+        # video 模式也接受音频后缀（保持 .mp3 不被改名），所有文件统一存到 data/mp4
+        allowed_exts = ["mp4", "m4s", "webm", "mov", "avi", "mkv", "mp3", "m4a", "wav", "flac", "ogg", "aac"]
         default_ext = "mp4"
 
     if filename:
@@ -493,18 +558,41 @@ def save_url_file(url: str, target_dir: str = "", filename: str = "", media_type
     output_path = target_path / filename
 
     try:
-        cmd = [
-            "ffmpeg",
-            "-i", url,
-            "-c", "copy",
-            "-bsf:a", "aac_adtstoasc",
-            "-y",
-            str(output_path)
-        ]
+        ffmpeg_exe = get_ffmpeg_path()
+        if not ffmpeg_exe:
+            return {
+                "success": False,
+                "error": "找不到 ffmpeg.exe，请确认 FFmpeg 已安装，或通过 start_with.bat 配置路径",
+            }
+        # 根据输出后缀决定编码策略：
+        #   mp3  → 需要转码（aac→mp3）
+        #   其它 → copy 原始流（m4a/m4s 已是 aac/mp4 容器，aac_adtstoasc 处理裸 aac 头）
+        out_ext = (output_path.suffix or "").lstrip(".").lower()
+        if out_ext == "mp3":
+            cmd = [
+                ffmpeg_exe,
+                "-headers", _build_ffmpeg_headers(url),
+                "-i", url,
+                "-vn",
+                "-c:a", "libmp3lame",
+                "-b:a", "192k",
+                "-y",
+                str(output_path)
+            ]
+        else:
+            cmd = [
+                ffmpeg_exe,
+                "-headers", _build_ffmpeg_headers(url),
+                "-i", url,
+                "-c", "copy",
+                "-bsf:a", "aac_adtstoasc",
+                "-y",
+                str(output_path)
+            ]
 
-        print(f"[File Manager] 下载媒体({media_type}): {' '.join(cmd[:6])}...")
+        print(f"[File Manager] 下载媒体({media_type}): {' '.join(cmd[:8])}...")
 
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600)
 
         if result.returncode != 0:
             print(f"[File Manager] 下载失败: {result.stderr}")
