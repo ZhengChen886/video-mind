@@ -1,0 +1,81 @@
+/* ============================
+   components/tree.css
+   职责：树形目录选择器样式（一键清理弹窗等场景使用）
+   ============================ */
+.folder-tree {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: #f8fafc;
+    padding: 6px 4px;
+    max-height: 220px;
+    overflow: auto;
+    font-size: 13px;
+    user-select: none;
+}
+
+.folder-tree::-webkit-scrollbar { width: 8px; }
+.folder-tree::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+.folder-tree::-webkit-scrollbar-track { background: transparent; }
+
+.tree-node { padding: 0; }
+.tree-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 6px;
+    border-radius: 6px;
+    cursor: pointer;
+    color: #1e293b;
+    white-space: nowrap;
+    line-height: 1.4;
+}
+.tree-row:hover { background: #e2e8f0; }
+.tree-row.selected {
+    background: #5b7def;
+    color: #fff;
+    font-weight: 500;
+}
+.tree-row.selected .tree-icon { color: #fff; }
+.tree-toggle {
+    display: inline-flex;
+    width: 16px;
+    height: 16px;
+    align-items: center;
+    justify-content: center;
+    color: #64748b;
+    font-size: 10px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: transform 0.15s ease;
+}
+.tree-toggle.expanded { transform: rotate(90deg); }
+.tree-toggle.empty { visibility: hidden; }
+.tree-icon {
+    color: #f59e0b;
+    font-size: 13px;
+    flex-shrink: 0;
+}
+.tree-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.tree-children {
+    padding-left: 18px;
+    border-left: 1px dashed #cbd5e1;
+    margin-left: 11px;
+}
+.tree-children.collapsed { display: none; }
+
+.tree-empty {
+    font-size: 13px;
+    color: #94a3b8;
+    text-align: center;
+    padding: 16px;
+}
+.tree-error {
+    font-size: 13px;
+    color: #dc2626;
+    text-align: center;
+    padding: 16px;
+}

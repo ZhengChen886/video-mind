@@ -11,6 +11,7 @@ import { loadTasks, renderTasks, startTasksPolling, stopTasksPolling, clearCompl
 import { handleFileSelect, updateSelectedFilesList, removeSelectedFile, uploadFile, extractFilenameFromUrl, uploadByUrl, startUrlDownloadPolling, initUrlUploadInput, renderUrlList, updateFilename, removeUrlItem } from './upload.js';
 import { isAudioPath, openVideoDetail, loadAnalysisResults, analyzeVideo, pollTaskProgress, generateSummary, generateNotes, generateOutline } from './video_detail.js';
 import { loadDirectories as loadDirectoriesModal, createFolder, computePathAfterOperation, refreshAfterStructureChange, renameFileFromCard, renameFile, moveFileFromCard, moveFile, deleteFileFromCard, renderDeleteModal, deleteSelected } from './file_ops.js';
+import { openCleanupModal, confirmCleanup, onCleanupPickFolder, onCleanupPickedPathClick, onCleanupPickedClear, onCleanupSelectAll, onCleanupSelectNone, onCleanupExtChange, onCleanupTreeClick, closeCleanupModal } from './file_cleanup.js';
 import { openModelSelectModal, loadModels, renderModelList, confirmModelSelect } from './model_select.js';
 import { openSettingsModal, loadConfigFromServer, loadProviderConfig, loadModelSelectModels, renderModelsTable, switchProviderTab, getCurrentEditingProviderId, addModelRow, removeModelRow, fetchModels, saveModelsToProvider, saveModelsFromTable, saveSettings, testConnection } from './settings.js';
 import { initGreeting, bindChartControls, openVideoFromActivity, showBatchAnalyze } from './home.js';
@@ -83,6 +84,16 @@ export {
     deleteFileFromCard,
     renderDeleteModal,
     deleteSelected,
+    openCleanupModal,
+    confirmCleanup,
+    onCleanupPickFolder,
+    onCleanupPickedPathClick,
+    onCleanupPickedClear,
+    onCleanupSelectAll,
+    onCleanupSelectNone,
+    onCleanupExtChange,
+    onCleanupTreeClick,
+    closeCleanupModal,
     openModelSelectModal,
     loadModels,
     renderModelList,

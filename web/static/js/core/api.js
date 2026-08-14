@@ -186,3 +186,27 @@ export function batchAnalyzeApi(paths, mediaType = 'video') {
 export function generateContentApi(endpoint, payload) {
     return post(endpoint, payload);
 }
+
+// 扫描文件夹中的所有文件类型（用于一键清理弹窗）
+export function listFolderFileTypes(path = '', mediaType = 'video') {
+    return get('/api/files/types', { path, media_type: mediaType });
+}
+
+// 一键清理：列出所有子目录
+export function listAllFolders(path = '', mediaType = 'video') {
+    return get('/api/files/all-folders', { path, media_type: mediaType });
+}
+
+// 一键清理：弹出本地资源管理器选目录
+export function pickFolderApi() {
+    return post('/api/files/pick-folder', {});
+}
+
+// 按保留后缀一键清理文件夹内非保留类型文件
+export function cleanupFolderFilesApi(path, keepExtensions, mediaType = 'video') {
+    return post('/api/files/cleanup', {
+        path,
+        media_type: mediaType,
+        keep_extensions: keepExtensions,
+    });
+}

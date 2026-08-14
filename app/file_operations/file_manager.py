@@ -183,6 +183,178 @@ def get_directory_list(path: str = "", media_type: str = "video") -> List[Dict[s
     return items
 
 
+def _is_dangerous_path(target_dir: Path) -> bool:
+    """
+    检查路径是否属于禁止清理的「危险目录」：
+    - 磁盘根目录（如 C:\\）
+    - Windows / Program Files / ProgramData 等系统目录
+    - Linux / macOS 的系统目录
+    """
+    import sys as _sys
+    try:
+        target_str = str(target_dir.resolve()).replace('/', '\\').lower().rstrip('\\')
+    except Exception:
+        return True
+    if _sys.platform.startswith('win'):
+        try:
+            if target_dir.drive and (target_dir == Path(target_dir.drive + '\\') or len(target_dir.parts) == 1):
+                return True
+        except Exception:
+            pass
+        # 系统目录（按环境变量动态取；排除 SystemDrive 等只是盘符的变量）
+        dangerous_env_keys = [
+            'SystemRoot', 'windir',
+            'ProgramFiles', 'ProgramFiles(x86)', 'ProgramW6432',
+            'ProgramData', 'ALLUSERSPROFILE',
+            'ComSpec',
+        ]
+        for key in dangerous_env_keys:
+            val = (os.environ.get(key) or '').strip()
+            if not val:
+                continue
+            val_norm = val.replace('/', '\\').lower().rstrip('\\')
+            # 跳过只到盘符级别的环境变量（如 SystemDrive=C:），避免误伤整盘
+            if len(val_norm) <= 3 and val_norm.endswith(':'):
+                continue
+            if target_str == val_norm or target_str.startswith(val_norm + '\\'):
+                return True
+        for hardcoded in [r'c:\windows', r'c:\program files', r'c:\program files (x86)', r'c:\programdata']:
+            if target_str == hardcoded or target_str.startswith(hardcoded + '\\'):
+                return True
+    else:
+        target_unix = str(target_dir.resolve()).replace('\\', '/').rstrip('/')
+        if target_unix == '' or target_unix == '/':
+            return True
+        for prefix in ['/etc', '/usr', '/var', '/boot', '/bin', '/sbin',
+                       '/lib', '/lib64', '/opt', '/proc', '/sys', '/dev',
+                       '/System', '/Library', '/Applications', '/private',
+                       '/snap', '/run']:
+            if target_unix == prefix or target_unix.startswith(prefix + '/'):
+                return True
+    return False
+
+
+def _resolve_target_dir(path: str, media_type: str) -> Optional[Path]:
+    """
+    解析目标目录：
+    - 相对路径：拼接到 base_dir
+    - 绝对路径：直接使用（全盘任意位置均可，危险目录除外）
+    - 失败 / 路径为系统目录或磁盘根：返回 None
+    """
+    base_dir = get_base_dir(media_type).resolve()
+    raw = (path or "").strip()
+    if raw and os.path.isabs(raw):
+        target_dir = Path(raw).resolve()
+    else:
+        target_dir = (base_dir / raw).resolve() if raw else base_dir
+    if _is_dangerous_path(target_dir):
+        return None
+    return target_dir
+
+
+def list_all_subfolders(path: str = "", media_type: str = "video") -> List[Dict[str, str]]:
+    """
+    递归列出指定目录下的所有子目录（不含自身）。
+    返回 [{path, name}]，name 是 path 末级目录名。
+    path 接受相对路径（相对 base_dir）或绝对路径（全盘任意位置，系统目录、磁盘根目录除外）。
+    """
+    base_dir = get_base_dir(media_type)
+    start_dir = _resolve_target_dir(path, media_type)
+    if start_dir is None or not start_dir.exists() or not start_dir.is_dir():
+        return []
+
+    result: List[Dict[str, str]] = []
+    for root, dirs, _files in os.walk(start_dir):
+        for d in sorted(dirs):
+            full = Path(root) / d
+            try:
+                rel = str(full.relative_to(base_dir))
+            except ValueError:
+                continue
+            result.append({"path": rel, "name": d})
+    result.sort(key=lambda x: x["path"])
+    return result
+
+
+def scan_folder_extensions(path: str = "", media_type: str = "video") -> Dict[str, Any]:
+    """
+    扫描指定文件夹（仅本层，不递归）中的文件扩展名，返回:
+      {
+        total_files: 文件总数（不含子目录）,
+        extensions: [{ext, count}, ...]   # ext 已统一小写；无后缀文件 ext 为 ''
+      }
+    path 接受相对路径（相对 base_dir）或绝对路径（全盘任意位置，系统目录、磁盘根目录除外）。
+    """
+    base_dir = get_base_dir(media_type)
+    target_dir = _resolve_target_dir(path, media_type)
+    if target_dir is None or not target_dir.exists() or not target_dir.is_dir():
+        return {"total_files": 0, "extensions": []}
+
+    ext_counter: Dict[str, int] = {}
+    total_files = 0
+    for item in target_dir.iterdir():
+        if item.is_file():
+            total_files += 1
+            ext = item.suffix.lower()
+            ext_counter[ext] = ext_counter.get(ext, 0) + 1
+
+    sorted_exts = sorted(
+        ext_counter.items(),
+        key=lambda kv: (0 if kv[0] == "" else 1, kv[0]),
+    )
+    return {
+        "total_files": total_files,
+        "extensions": [{"ext": k, "count": v} for k, v in sorted_exts],
+    }
+
+
+def cleanup_folder_keep_extensions(path: str, keep_extensions: List[str], media_type: str = "video") -> Dict[str, Any]:
+    """
+    仅处理当前文件夹（非递归），删除扩展名不在 keep_extensions 列表中的文件。
+    keep_extensions 允许传入带或不带前导点的后缀（如 '.md' / 'md'）。
+    path 接受相对路径（相对 base_dir）或绝对路径（全盘任意位置，系统目录、磁盘根目录除外）。
+    返回:
+      {
+        deleted: [filename, ...],
+        kept: [filename, ...],
+        errors: [msg, ...]
+      }
+    """
+    base_dir = get_base_dir(media_type)
+    target_dir = _resolve_target_dir(path, media_type)
+    if target_dir is None or not target_dir.exists() or not target_dir.is_dir():
+        return {"deleted": [], "kept": [], "errors": ["文件夹不存在或路径非法"]}
+
+    keep_set = set()
+    for ext in keep_extensions or []:
+        if not ext:
+            continue
+        e = ext.strip().lower()
+        if not e:
+            continue
+        if not e.startswith("."):
+            e = "." + e
+        keep_set.add(e)
+
+    deleted: List[str] = []
+    kept: List[str] = []
+    errors: List[str] = []
+    for item in list(target_dir.iterdir()):
+        if item.is_dir():
+            continue
+        ext = item.suffix.lower()
+        if ext in keep_set:
+            kept.append(item.name)
+            continue
+        try:
+            os.remove(item)
+            deleted.append(item.name)
+        except Exception as exc:
+            errors.append(f"{item.name}: {exc}")
+
+    return {"deleted": deleted, "kept": kept, "errors": errors}
+
+
 def create_directory(path: str, name: str, media_type: str = "video") -> bool:
     """
     在指定路径下创建新目录

@@ -1,6 +1,10 @@
 import uuid
 import re
 import hashlib
+import sys
+import os
+import subprocess
+import asyncio
 import requests
 import threading
 from pathlib import Path
@@ -8,6 +12,7 @@ from contextlib import asynccontextmanager
 from typing import List, Dict, Any
 import uvicorn
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request, BackgroundTasks
+from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles as _BaseStaticFiles
@@ -44,6 +49,9 @@ from app.speech_text.asr_onnx import transcribe_audio
 
 from app.file_operations.file_manager import (
     get_directory_list,
+    list_all_subfolders,
+    scan_folder_extensions,
+    cleanup_folder_keep_extensions,
     create_directory,
     delete_item,
     move_item,
@@ -485,6 +493,314 @@ async def list_files(path: str = "", media_type: str = "video"):
         "media_type": media_type,
         "items": items
     }
+
+
+# ============================================================
+# 一键清理：路径解析（支持任意绝对路径，含 base_dir 外目录）
+# ============================================================
+def _is_dangerous_path(target_dir: Path) -> bool:
+    """
+    检查路径是否属于禁止清理的「危险目录」：
+    - 磁盘根目录（如 C:\）
+    - Windows / Program Files / ProgramData 等系统目录
+    - Linux / macOS 的系统目录
+    """
+    try:
+        target_str = str(target_dir.resolve()).replace('/', '\\').lower().rstrip('\\')
+    except Exception:
+        return True
+    if sys.platform.startswith('win'):
+        # 磁盘根目录
+        try:
+            if target_dir.drive and (target_dir == Path(target_dir.drive + '\\') or len(target_dir.parts) == 1):
+                return True
+        except Exception:
+            pass
+        # 系统目录（按环境变量动态取）
+        dangerous_env_keys = [
+            'SystemRoot', 'windir',
+            'ProgramFiles', 'ProgramFiles(x86)', 'ProgramW6432',
+            'ProgramData', 'ALLUSERSPROFILE',
+            'ComSpec',
+        ]
+        for key in dangerous_env_keys:
+            val = (os.environ.get(key) or '').strip()
+            if not val:
+                continue
+            val_norm = val.replace('/', '\\').lower().rstrip('\\')
+            # 跳过只到盘符级别的环境变量（如 SystemDrive=C:），避免误伤整盘
+            if len(val_norm) <= 3 and val_norm.endswith(':'):
+                continue
+            if target_str == val_norm or target_str.startswith(val_norm + '\\'):
+                return True
+        # 兜底：常见系统目录
+        for hardcoded in [r'c:\windows', r'c:\program files', r'c:\program files (x86)', r'c:\programdata']:
+            if target_str == hardcoded or target_str.startswith(hardcoded + '\\'):
+                return True
+    else:
+        # Linux / macOS
+        target_unix = str(target_dir.resolve()).replace('\\', '/').rstrip('/')
+        if target_unix == '' or target_unix == '/':
+            return True
+        for prefix in ['/etc', '/usr', '/var', '/boot', '/bin', '/sbin',
+                       '/lib', '/lib64', '/opt', '/proc', '/sys', '/dev',
+                       '/System', '/Library', '/Applications', '/private',
+                       '/snap', '/run']:
+            if target_unix == prefix or target_unix.startswith(prefix + '/'):
+                return True
+    return False
+
+
+def _resolve_target_path(path: str, media_type: str) -> dict:
+    """
+    解析目标路径，支持：
+    - 相对路径：拼接到 base_dir（与 tree 选择一致）
+    - 绝对路径：直接使用（全盘任意位置均可）
+    返回 dict：
+      {
+        base_dir, target_dir, is_outside_base_dir, is_dangerous, error
+      }
+    """
+    if media_type not in ("video", "audio"):
+        media_type = "video"
+    base_dir = get_base_dir(media_type).resolve()
+    raw = (path or "").strip()
+    if raw and os.path.isabs(raw):
+        target_dir = Path(raw).resolve()
+    else:
+        target_dir = (base_dir / raw).resolve() if raw else base_dir
+    is_outside_base_dir = (target_dir != base_dir and base_dir not in target_dir.parents)
+    is_dangerous = _is_dangerous_path(target_dir)
+    if is_dangerous:
+        return {
+            "base_dir": str(base_dir),
+            "target_dir": str(target_dir),
+            "is_outside_base_dir": is_outside_base_dir,
+            "is_dangerous": True,
+            "error": JSONResponse(
+                status_code=400,
+                content={"success": False, "error": f"目标文件夹 {target_dir} 属于系统目录或磁盘根目录，禁止清理"},
+            ),
+        }
+    return {
+        "base_dir": str(base_dir),
+        "target_dir": str(target_dir),
+        "is_outside_base_dir": is_outside_base_dir,
+        "is_dangerous": False,
+        "error": None,
+    }
+
+
+# 兼容旧调用：返回 (base_dir, target_dir, err) 三元组
+def _resolve_safe_path(path: str, media_type: str):
+    info = _resolve_target_path(path, media_type)
+    if info["error"]:
+        return info["base_dir"], None, info["error"]
+    return info["base_dir"], Path(info["target_dir"]), None
+
+
+@app.get("/api/files/types", response_class=JSONResponse)
+async def list_folder_file_types(path: str = "", media_type: str = "video"):
+    """
+    扫描指定文件夹中所有文件的扩展名（仅本层，不递归），并返回每个扩展名的文件数。
+    用于「一键清理」弹窗动态生成文件类型下拉选项。
+    """
+    if media_type not in ("video", "audio"):
+        media_type = "video"
+    info = _resolve_target_path(path, media_type)
+    if info["error"]:
+        return info["error"]
+    target_dir = Path(info["target_dir"])
+    if not target_dir.exists() or not target_dir.is_dir():
+        return JSONResponse(
+            status_code=404,
+            content={"success": False, "error": "文件夹不存在"},
+        )
+
+    scan = scan_folder_extensions(path, media_type=media_type)
+    return {
+        "success": True,
+        "path": path,
+        "media_type": media_type,
+        "base_dir": info["base_dir"],
+        "target_dir": info["target_dir"],
+        "is_outside_base_dir": info["is_outside_base_dir"],
+        "is_dangerous": info["is_dangerous"],
+        "total_files": scan["total_files"],
+        "extensions": scan["extensions"],
+    }
+
+
+# ============================================================
+# 一键清理：列出所有子目录（用于下拉选择）
+# ============================================================
+@app.get("/api/files/all-folders", response_class=JSONResponse)
+async def list_all_folders(path: str = "", media_type: str = "video"):
+    """递归列出指定目录下的所有子目录（不含自身），供一键清理弹窗下拉使用"""
+    if media_type not in ("video", "audio"):
+        media_type = "video"
+    info = _resolve_target_path(path, media_type)
+    if info["error"]:
+        return info["error"]
+    target_dir = Path(info["target_dir"])
+    if not target_dir.exists() or not target_dir.is_dir():
+        return JSONResponse(
+            status_code=404,
+            content={"success": False, "error": "文件夹不存在"},
+        )
+    folders = list_all_subfolders(path, media_type=media_type)
+    return {
+        "success": True,
+        "path": path,
+        "media_type": media_type,
+        "base_dir": info["base_dir"],
+        "is_outside_base_dir": info["is_outside_base_dir"],
+        "folders": folders,
+    }
+
+
+# ============================================================
+# 一键清理：按保留后缀删除文件夹内其他文件
+# ============================================================
+class CleanupRequest(BaseModel):
+    path: str = ""
+    media_type: str = "video"
+    keep_extensions: List[str] = []
+
+
+@app.post("/api/files/cleanup", response_class=JSONResponse)
+async def cleanup_folder_files(req: CleanupRequest):
+    """
+    仅处理当前文件夹（非递归），删除扩展名不在 keep_extensions 列表中的文件。
+    keep_extensions 示例：['.md'] 表示只保留 .md 文件。
+    """
+    if req.media_type not in ("video", "audio"):
+        req.media_type = "video"
+    _, target_dir, err = _resolve_safe_path(req.path, req.media_type)
+    if err:
+        return err
+    if not target_dir.exists() or not target_dir.is_dir():
+        return JSONResponse(
+            status_code=404,
+            content={"success": False, "error": "文件夹不存在"},
+        )
+
+    result = cleanup_folder_keep_extensions(
+        req.path, req.keep_extensions or [], media_type=req.media_type
+    )
+    keep_set = set()
+    for e in req.keep_extensions or []:
+        if not e:
+            continue
+        v = e.strip().lower()
+        if not v:
+            continue
+        if not v.startswith("."):
+            v = "." + v
+        keep_set.add(v)
+
+    return {
+        "success": True,
+        "path": req.path,
+        "media_type": req.media_type,
+        "kept_extensions": sorted(keep_set),
+        "deleted_count": len(result["deleted"]),
+        "kept_count": len(result["kept"]),
+        "deleted": result["deleted"],
+        "kept": result["kept"],
+        "errors": result["errors"],
+    }
+
+
+# ============================================================
+# 一键清理：弹出本地资源管理器选目录
+# ============================================================
+def _pick_folder_windows() -> str:
+    """Windows 下调用 PowerShell + FolderBrowserDialog 弹出本地选目录对话框，返回用户选择的绝对路径，未选择则返回空串"""
+    # 显式设置 PowerShell 输出编码为 UTF-8，避免中文路径在 Python 端被错误解码
+    ps_script = (
+        "$OutputEncoding = [System.Text.Encoding]::UTF8; "
+        "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
+        "Add-Type -AssemblyName System.Windows.Forms | Out-Null; "
+        "$f = New-Object System.Windows.Forms.FolderBrowserDialog; "
+        "$f.Description = '请选择要清理的文件夹（系统目录、磁盘根目录除外）'; "
+        "$f.ShowNewFolderButton = $false; "
+        "if ($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { "
+        "Write-Output $f.SelectedPath; "
+        "}"
+    )
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_script],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=600,
+    )
+    return (result.stdout or "").strip()
+
+
+def _pick_folder_linux() -> str:
+    """Linux 下用 zenity/kdialog 弹目录选择对话框，失败则返回空串"""
+    for cmd in (["zenity", "--file-selection", "--directory"],
+                ["kdialog", "--getexistingdirectory"]):
+        try:
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=600,
+            )
+            if result.returncode == 0:
+                return (result.stdout or "").strip()
+        except FileNotFoundError:
+            continue
+        except Exception:
+            continue
+    return ""
+
+
+@app.post("/api/files/pick-folder", response_class=JSONResponse)
+async def pick_folder():
+    """
+    弹出本地操作系统的资源管理器选目录对话框，返回用户选择的绝对路径。
+    - Windows: PowerShell + FolderBrowserDialog
+    - Linux: zenity / kdialog
+    - macOS: 暂未实现，返回明确错误
+    """
+    if sys.platform.startswith("win"):
+        try:
+            path = await asyncio.get_event_loop().run_in_executor(
+                None, _pick_folder_windows
+            )
+            if not path:
+                return {"success": False, "cancelled": True, "path": ""}
+            return {"success": True, "cancelled": False, "path": path}
+        except subprocess.TimeoutExpired:
+            return JSONResponse(
+                status_code=408,
+                content={"success": False, "error": "选目录超时"},
+            )
+        except Exception as e:
+            return JSONResponse(
+                status_code=500,
+                content={"success": False, "error": f"弹窗失败: {e}"},
+            )
+    elif sys.platform.startswith("linux"):
+        try:
+            path = await asyncio.get_event_loop().run_in_executor(
+                None, _pick_folder_linux
+            )
+            if not path:
+                return {"success": False, "cancelled": True, "path": ""}
+            return {"success": True, "cancelled": False, "path": path}
+        except Exception as e:
+            return JSONResponse(
+                status_code=500,
+                content={"success": False, "error": f"弹窗失败: {e}"},
+            )
+    else:
+        return JSONResponse(
+            status_code=501,
+            content={"success": False, "error": f"当前平台 {sys.platform} 暂不支持弹窗选目录"},
+        )
 
 
 # ============================================================

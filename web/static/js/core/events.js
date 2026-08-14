@@ -8,7 +8,7 @@ import {
     bindSidebarEvents,
     bindParentMenuToggles
 } from '../pages/videos.js';
-import { switchPage, loadFiles, loadAudioFiles, startTasksPolling, stopTasksPolling, clearCompletedTasks, toggleSelectAll, clearSelection, startBatchTranscribe, createFolder, updateSelectedFilesList, uploadFile, uploadByUrl, initUrlUploadInput, analyzeVideo, generateSummary, generateNotes, generateOutline, renameFile, moveFile, deleteSelected, renderModelList, confirmModelSelect, fetchModels, addModelRow, saveModelsFromTable, saveSettings, switchProviderTab, openSettingsModal, openModelSelectModal, testConnection } from '../pages/index-bridge.js';
+import { switchPage, loadFiles, loadAudioFiles, startTasksPolling, stopTasksPolling, clearCompletedTasks, toggleSelectAll, clearSelection, startBatchTranscribe, createFolder, updateSelectedFilesList, uploadFile, uploadByUrl, initUrlUploadInput, analyzeVideo, generateSummary, generateNotes, generateOutline, renameFile, moveFile, deleteSelected, renderModelList, confirmModelSelect, fetchModels, addModelRow, saveModelsFromTable, saveSettings, switchProviderTab, openSettingsModal, openModelSelectModal, testConnection, openCleanupModal, confirmCleanup, onCleanupPickFolder, onCleanupPickedPathClick, onCleanupPickedClear, onCleanupSelectAll, onCleanupSelectNone, onCleanupExtChange, onCleanupTreeClick, closeCleanupModal } from '../pages/index-bridge.js';
 import { debounce } from './utils.js';
 import { state } from './state.js';
 
@@ -144,6 +144,54 @@ export function bindEvents() {
     const clearCompletedBtn = document.getElementById('clearCompletedTasks');
     if (clearCompletedBtn) {
         clearCompletedBtn.addEventListener('click', clearCompletedTasks);
+    }
+
+    // 一键清理按钮
+    const cleanupBtn = document.getElementById('cleanupFolderBtn');
+    if (cleanupBtn) {
+        console.log('[events] cleanupFolderBtn found, binding click');
+        cleanupBtn.addEventListener('click', openCleanupModal);
+    } else {
+        console.error('[events] #cleanupFolderBtn 元素不存在，无法绑定点击事件');
+    }
+    const cancelCleanupBtn = document.getElementById('cancelCleanup');
+    if (cancelCleanupBtn) {
+        cancelCleanupBtn.addEventListener('click', closeCleanupModal);
+    }
+    const confirmCleanupBtn = document.getElementById('confirmCleanup');
+    if (confirmCleanupBtn) {
+        confirmCleanupBtn.addEventListener('click', confirmCleanup);
+    }
+    // 弹出本地资源管理器选目录
+    const pickBtn = document.getElementById('cleanupPickFolderBtn');
+    if (pickBtn) {
+        pickBtn.addEventListener('click', onCleanupPickFolder);
+    }
+    const pickedInput = document.getElementById('cleanupPickedPath');
+    if (pickedInput) {
+        pickedInput.addEventListener('click', onCleanupPickedPathClick);
+    }
+    const pickedClearBtn = document.getElementById('cleanupPickedClearBtn');
+    if (pickedClearBtn) {
+        pickedClearBtn.addEventListener('click', onCleanupPickedClear);
+    }
+    // 树形目录点击（事件委托）
+    const cleanupFolderTree = document.getElementById('cleanupFolderTree');
+    if (cleanupFolderTree) {
+        cleanupFolderTree.addEventListener('click', onCleanupTreeClick);
+    }
+    const cleanupSelectAllBtn = document.getElementById('cleanupSelectAllBtn');
+    if (cleanupSelectAllBtn) {
+        cleanupSelectAllBtn.addEventListener('click', onCleanupSelectAll);
+    }
+    const cleanupSelectNoneBtn = document.getElementById('cleanupSelectNoneBtn');
+    if (cleanupSelectNoneBtn) {
+        cleanupSelectNoneBtn.addEventListener('click', onCleanupSelectNone);
+    }
+    // 文件类型复选框变化时刷新预览（事件委托）
+    const cleanupExtList = document.getElementById('cleanupExtList');
+    if (cleanupExtList) {
+        cleanupExtList.addEventListener('change', onCleanupExtChange);
     }
 
     // 批量操作工具栏
