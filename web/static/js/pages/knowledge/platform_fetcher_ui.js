@@ -6,6 +6,8 @@
 //      需要 Cookie 的平台，未配置时禁用「获取链接」并提示
 //      点击「获取链接」POST /api/tools/fetch {platform, params:{input}}
 //      回填到 urlDownloadItems + urlUploadInput（叠加去重）
+//      同时把用户输入的原始平台页 URL 存入 state.urlSourceUrl，
+//      提交下载时由 upload.js 作为 source_url 发送（B站链接触发后端抓字幕）
 // ============================
 import { state } from '../../core/state.js';
 import { renderUrlList } from '../upload.js';
@@ -126,6 +128,8 @@ async function fetchPlatform() {
             .filter(it => it.url && !existingUrls.has(it.url))
             .map(it => ({ url: it.url, filename: it.name || (it.url.split('/').pop() || 'video.mp4') }));
         state.urlDownloadItems = existing.concat(newItems);
+        // 记录用户输入的原始平台页 URL，提交下载时作为 source_url 发送（B站链接会触发后端抓字幕）
+        state.urlSourceUrl = value;
 
         // 同步 textarea
         const textarea = document.getElementById('urlUploadInput');

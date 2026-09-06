@@ -8,8 +8,8 @@ import { API_BASE_URL } from '../core/config.js';
 import { loadFiles, loadAudioFiles, loadDirectories, updatePathNav, navigateToPath, updateSidebarActiveState, loadSidebarVideoFolders, loadSidebarAudioFolders, toggleSubmenu, loadDocuments, renderDocuments, renderDocumentCardsView, renderDocumentListView, renderFiles, renderCardsView, renderListView, loadThumbnails, bindSidebarEvents, bindParentMenuToggles, bindFileEvents, updateTopBarMode } from './videos.js';
 import { toggleVideoSelection, renderFilesWithSelection, updateBatchToolbar, toggleSelectAll, clearSelection, startBatchTranscribe } from './selection.js';
 import { loadTasks, renderTasks, startTasksPolling, stopTasksPolling, clearCompletedTasks } from './tasks.js';
-import { handleFileSelect, updateSelectedFilesList, removeSelectedFile, uploadFile, extractFilenameFromUrl, uploadByUrl, startUrlDownloadPolling, initUrlUploadInput, renderUrlList, updateFilename, removeUrlItem } from './upload.js';
-import { isAudioPath, openVideoDetail, loadAnalysisResults, analyzeVideo, pollTaskProgress, generateSummary, generateNotes, generateOutline } from './video_detail.js';
+import { handleFileSelect, updateSelectedFilesList, removeSelectedFile, uploadFile, extractFilenameFromUrl, uploadByUrl, startUrlDownloadPolling, initUrlUploadInput, renderUrlList, updateFilename, removeUrlItem, stopUrlDownloadTracking, cancelUrlDownload } from './upload.js';
+import { isAudioPath, openVideoDetail, loadAnalysisResults, analyzeVideo, pollTaskProgress, cancelAnalyzeTask, generateSummary, generateNotes, generateOutline } from './video_detail.js';
 import { loadDirectories as loadDirectoriesModal, createFolder, computePathAfterOperation, refreshAfterStructureChange, renameFileFromCard, renameFile, moveFileFromCard, moveFile, deleteFileFromCard, renderDeleteModal, deleteSelected } from './file_ops.js';
 import { openCleanupModal, confirmCleanup, onCleanupPickFolder, onCleanupPickedPathClick, onCleanupPickedClear, onCleanupSelectAll, onCleanupSelectNone, onCleanupExtChange, onCleanupTreeClick, closeCleanupModal } from './file_cleanup.js';
 import { openModelSelectModal, loadModels, renderModelList, confirmModelSelect } from './model_select.js';
@@ -66,11 +66,14 @@ export {
     renderUrlList,
     updateFilename,
     removeUrlItem,
+    stopUrlDownloadTracking,
+    cancelUrlDownload,
     isAudioPath,
     openVideoDetail,
     loadAnalysisResults,
     analyzeVideo,
     pollTaskProgress,
+    cancelAnalyzeTask,
     generateSummary,
     generateNotes,
     generateOutline,

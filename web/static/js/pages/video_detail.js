@@ -3,9 +3,12 @@
 // 职责：视频/音频详情面板、转录、生成总结/笔记/大纲
 // ============================
 import { API_BASE_URL, appConfig } from '../core/config.js';
-import { getAnalysisResult, getTaskStatus, analyzeVideoApi, generateContentApi } from '../core/api.js';
+import { getAnalysisResult, getTaskStatus, analyzeVideoApi, generateContentApi, streamTaskProgress, cancelTask } from '../core/api.js';
 import { state } from '../core/state.js';
 import { simpleMarkdownToHtml } from '../core/utils.js';
+
+// 当前分析任务 id（取消按钮用；SSE 流在任务终态后由后端关闭，无需手动 abort）
+let currentAnalyzeTaskId = null;
 
 export function isAudioPath(path) {
     if (!path) return false;
@@ -135,68 +138,114 @@ export async function analyzeVideo() {
     const progressFill = progressBar ? progressBar.querySelector('.progress-fill') : null;
     const progressMessage = document.getElementById('analyzeProgressMessage');
     const btn = document.getElementById('btnAnalyze');
+    const cancelBtn = document.getElementById('btnCancelAnalyze');
     try {
         if (progressBar) progressBar.style.display = 'block';
         if (progressMessage) progressMessage.style.display = 'block';
+        if (cancelBtn) cancelBtn.style.display = '';
         if (btn) btn.disabled = true;
         if (progressFill) progressFill.style.width = '0%';
         if (progressMessage) progressMessage.textContent = '准备开始...';
         const data = await analyzeVideoApi(state.currentVideo.path, state.currentVideo.media_type || 'video');
         if (data && data.success && data.task_id) {
+            currentAnalyzeTaskId = data.task_id;
             await pollTaskProgress(data.task_id);
         } else {
             alert('分析失败: ' + ((data && data.error) || '未知错误'));
-            if (progressBar) progressBar.style.display = 'none';
-            if (progressMessage) progressMessage.style.display = 'none';
-            if (btn) btn.disabled = false;
+            finishAnalyzeUI();
         }
     } catch (error) {
         alert('分析失败: ' + error.message);
-        if (progressBar) progressBar.style.display = 'none';
-        if (progressMessage) progressMessage.style.display = 'none';
-        if (btn) btn.disabled = false;
+        finishAnalyzeUI();
     }
 }
 
-export async function pollTaskProgress(taskId) {
+// 终态收尾：隐藏进度区（含取消按钮）、恢复转录按钮（completed/failed/cancelled 共用）
+function finishAnalyzeUI() {
+    const progressBar = document.getElementById('analyzeProgress');
+    const progressMessage = document.getElementById('analyzeProgressMessage');
+    const btn = document.getElementById('btnAnalyze');
+    const cancelBtn = document.getElementById('btnCancelAnalyze');
+    if (progressBar) progressBar.style.display = 'none';
+    if (progressMessage) progressMessage.style.display = 'none';
+    if (cancelBtn) cancelBtn.style.display = 'none';
+    if (btn) btn.disabled = false;
+    currentAnalyzeTaskId = null;
+}
+
+// 处理一次任务快照（SSE 与轮询共用）：更新进度 UI，返回是否到达终态
+function handleAnalyzeSnapshot(task) {
     const progressBar = document.getElementById('analyzeProgress');
     const progressFill = progressBar ? progressBar.querySelector('.progress-fill') : null;
     const progressMessage = document.getElementById('analyzeProgressMessage');
-    const btn = document.getElementById('btnAnalyze');
-    let pollInterval;
-    try {
-        pollInterval = setInterval(async () => {
+    if (progressFill) progressFill.style.width = `${task.progress || 0}%`;
+    if (progressMessage) progressMessage.textContent = task.message || '处理中...';
+    if (task.status === 'completed') {
+        finishAnalyzeUI();
+        if (task.result && state.currentVideo) {
+            loadAnalysisResults(state.currentVideo.path);
+        }
+        return true;
+    }
+    if (task.status === 'failed') {
+        finishAnalyzeUI();
+        alert('处理失败: ' + (task.message || '未知错误'));
+        return true;
+    }
+    if (task.status === 'cancelled') {
+        finishAnalyzeUI();
+        return true;
+    }
+    return false;
+}
+
+export async function pollTaskProgress(taskId) {
+    let finished = false;
+    const checkSnapshot = (task) => {
+        if (handleAnalyzeSnapshot(task)) finished = true;
+    };
+    // SSE 不可用（file:// 或代理不支持流式）时的降级路径：500ms 轮询（原轮询逻辑）
+    const fallbackToPolling = () => {
+        const pollInterval = setInterval(async () => {
+            if (finished) {
+                clearInterval(pollInterval);
+                return;
+            }
             try {
                 const data = await getTaskStatus(taskId);
-                if (data && data.success && data.task) {
-                    const task = data.task;
-                    if (progressFill) progressFill.style.width = `${task.progress || 0}%`;
-                    if (progressMessage) progressMessage.textContent = task.message || '处理中...';
-                    if (task.status === 'completed') {
-                        clearInterval(pollInterval);
-                        if (progressBar) progressBar.style.display = 'none';
-                        if (progressMessage) progressMessage.style.display = 'none';
-                        if (btn) btn.disabled = false;
-                        if (task.result && state.currentVideo) {
-                            await loadAnalysisResults(state.currentVideo.path);
-                        }
-                    } else if (task.status === 'failed') {
-                        clearInterval(pollInterval);
-                        if (progressBar) progressBar.style.display = 'none';
-                        if (progressMessage) progressMessage.style.display = 'none';
-                        if (btn) btn.disabled = false;
-                        alert('处理失败: ' + (task.message || '未知错误'));
-                    }
-                }
+                if (data && data.success && data.task) checkSnapshot(data.task);
             } catch (error) {
                 console.error('查询任务进度失败:', error);
             }
         }, 500);
+    };
+    // 优先 SSE 实时进度；终态处理与轮询一致
+    streamTaskProgress(
+        taskId,
+        checkSnapshot,
+        (endData) => {
+            // 流正常终止：终态已由 onUpdate 处理；未收到终态（如任务不存在）时兜底恢复 UI
+            if (!finished) {
+                finished = true;
+                finishAnalyzeUI();
+                if (endData && endData.error) alert('查询进度失败: ' + endData.error);
+            }
+        },
+        () => {
+            if (!finished) fallbackToPolling();
+        }
+    );
+}
+
+// 取消当前分析任务：取消成功后由 SSE/轮询推送 cancelled 终态恢复 UI
+export async function cancelAnalyzeTask() {
+    if (!currentAnalyzeTaskId) return;
+    try {
+        const data = await cancelTask(currentAnalyzeTaskId);
+        if (data && data.task) handleAnalyzeSnapshot(data.task);
     } catch (error) {
-        clearInterval(pollInterval);
-        if (progressBar) progressBar.style.display = 'none';
-        if (btn) btn.disabled = false;
-        alert('查询进度失败: ' + error.message);
+        // 任务已结束（404/409）等场景：忽略错误，终态由 SSE/轮询驱动 UI 恢复
+        console.warn('取消分析任务失败:', error.message);
     }
 }
 

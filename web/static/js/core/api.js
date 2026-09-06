@@ -142,6 +142,77 @@ export function clearCompletedTasksApi() {
     return post('/api/tasks/clear-completed', {});
 }
 
+// SSE 实时任务进度：
+// - onUpdate(task) 收任务快照（JSON，含 status/progress/message/result）
+// - onEnd(endData) 收终止事件（任务进入 completed/failed/cancelled；endData 可能携带 {error}）
+// - onError(error) 连接/流异常，调用方应降级为轮询
+// 返回 { abort() } 供调用方主动断流
+// 用 fetch + ReadableStream 手动解析（EventSource 无法带自定义头，且 onerror 语义不可控）
+export function streamTaskProgress(taskId, onUpdate, onEnd, onError) {
+    const controller = new AbortController();
+    (async () => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/tasks/${encodeURIComponent(taskId)}/stream`, {
+                method: 'GET',
+                headers: { 'Accept': 'text/event-stream' },
+                signal: controller.signal
+            });
+            if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let ended = false;
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+                // SSE 事件以空行（\n\n）分隔，可能一次收到多个事件
+                let sep;
+                while ((sep = buffer.indexOf('\n\n')) !== -1) {
+                    const chunk = buffer.slice(0, sep);
+                    buffer = buffer.slice(sep + 2);
+                    let eventName = '';
+                    const dataLines = [];
+                    chunk.split('\n').forEach(line => {
+                        if (line.startsWith('event:')) eventName = line.slice(6).trim();
+                        else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+                    });
+                    if (eventName === 'end') {
+                        ended = true;
+                        let endData = null;
+                        if (dataLines.length > 0) {
+                            try { endData = JSON.parse(dataLines.join('\n')); } catch (e) {}
+                        }
+                        if (onEnd) onEnd(endData);
+                        return;
+                    }
+                    if (dataLines.length > 0) {
+                        try {
+                            const task = JSON.parse(dataLines.join('\n'));
+                            if (onUpdate) onUpdate(task);
+                        } catch (e) {
+                            console.error('[API] SSE 数据解析失败:', e);
+                        }
+                    }
+                }
+            }
+            // 流关闭但未收到 end 事件（代理截断等）：按异常处理，交由调用方降级
+            if (!ended && onError) onError(new Error('SSE 流异常关闭'));
+        } catch (error) {
+            if (error && error.name === 'AbortError') return;
+            console.error('[API] SSE 连接失败:', { taskId, error: error.message });
+            if (onError) onError(error);
+        }
+    })();
+    return { abort: () => controller.abort() };
+}
+
+// 请求取消任务；成功返回 {success:true, task}
+// 失败（404 任务不存在 / 409 已结束）时抛错：error.message 为后端 error 文案，error.status / error.payload 可用
+export function cancelTask(taskId) {
+    return post(`/api/tasks/${encodeURIComponent(taskId)}/cancel`, {});
+}
+
 // 创建文件夹（替换 /api/folders /api/directory）
 export function createFolderApi(path, name, mediaType = 'video') {
     return post('/api/folders', { path, name, media_type: mediaType });

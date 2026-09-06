@@ -99,11 +99,7 @@
 #modalTasks .modal {
     max-width: 700px;
 }
-
-#tasksList {
-    max-height: 60vh;
-    overflow-y: auto;
-}
+/* #tasksList 的滚动由外层 modal-body 统一承担，不单独设置 max-height/overflow，避免双重滚动条 */
 
 /* ============================
    URL Download List Styles

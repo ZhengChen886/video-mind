@@ -384,9 +384,6 @@ body.nav-drawer-open .drawer-overlay {
     #modalTasks .modal {
         max-width: 95vw;
     }
-    #tasksList {
-        max-height: 65vh;
-    }
 }
 
 /* ============================

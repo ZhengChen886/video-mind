@@ -41,6 +41,8 @@ export const state = {
     currentUrlDownloadTaskId: null,
     urlPollingInterval: null,
     urlDownloadItems: [],
+    // 平台获取时用户输入的原始平台页 URL（如B站链接），提交下载时作为 source_url 发送
+    urlSourceUrl: null,
 
     // 上传文件
     selectedUploadFiles: [],

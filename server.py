@@ -1,6 +1,7 @@
 import uuid
 import re
 import hashlib
+import json
 import sys
 import os
 import subprocess
@@ -46,6 +47,7 @@ class CachedStaticFiles(_BaseStaticFiles):
 # 导入外部模块
 from app.file_operations.audio_converter import convert_audio_to_mp3
 from app.speech_text.asr_onnx import transcribe_audio
+from app.downloaders.subtitle_service import try_fetch_platform_subtitles
 
 from app.file_operations.file_manager import (
     get_directory_list,
@@ -100,6 +102,7 @@ TASK_STATUS_PENDING = "pending"
 TASK_STATUS_RUNNING = "running"
 TASK_STATUS_COMPLETED = "completed"
 TASK_STATUS_FAILED = "failed"
+TASK_STATUS_CANCELLED = "cancelled"
 
 
 def create_task(task_type: str, data: Dict[str, Any]) -> str:
@@ -113,6 +116,7 @@ def create_task(task_type: str, data: Dict[str, Any]) -> str:
             "data": data,
             "progress": 0,
             "message": "",
+            "cancel_requested": False,
             "created_at": time.time(),
             "updated_at": time.time(),
             "result": None
@@ -152,6 +156,25 @@ def clear_completed_tasks():
             del tasks[tid]
 
 
+def cancel_task(task_id: str) -> Dict[str, Any]:
+    """请求取消任务。返回更新后的任务字典；任务不存在/已终结时返回带 error 的字典"""
+    with tasks_lock:
+        task = tasks.get(task_id)
+        if task is None:
+            return {"success": False, "error": "任务不存在"}
+        if task["status"] in [TASK_STATUS_COMPLETED, TASK_STATUS_FAILED, TASK_STATUS_CANCELLED]:
+            return {"success": False, "error": f"任务已结束（{task['status']}），无法取消"}
+        task["cancel_requested"] = True
+        task["updated_at"] = time.time()
+        return {"success": True, "task": task}
+
+
+def is_cancel_requested(task_id: str) -> bool:
+    with tasks_lock:
+        task = tasks.get(task_id)
+        return bool(task and task.get("cancel_requested"))
+
+
 def process_batch_transcribe_task(task_id: str, video_paths: List[str]):
     """处理批量转录任务"""
     update_task(task_id, status=TASK_STATUS_RUNNING, message="开始处理...")
@@ -160,6 +183,9 @@ def process_batch_transcribe_task(task_id: str, video_paths: List[str]):
     total = len(video_paths)
     
     for i, video_path in enumerate(video_paths):
+        if is_cancel_requested(task_id):
+            update_task(task_id, status=TASK_STATUS_CANCELLED, message="任务已取消", result=results)
+            return
         try:
             update_task(task_id, 
                        progress=int((i / total) * 100),
@@ -221,7 +247,7 @@ def process_batch_transcribe_task(task_id: str, video_paths: List[str]):
                result=results)
 
 
-def process_batch_url_download_task(task_id: str, url_or_items, target_dir: str = ""):
+def process_batch_url_download_task(task_id: str, url_or_items, target_dir: str = "", source_url: str = ""):
     """处理批量URL下载任务，支持items格式或urls列表"""
     update_task(task_id, status=TASK_STATUS_RUNNING, message="开始下载...")
     
@@ -233,6 +259,9 @@ def process_batch_url_download_task(task_id: str, url_or_items, target_dir: str 
         total = len(items)
         
         for i, item in enumerate(items):
+            if is_cancel_requested(task_id):
+                update_task(task_id, status=TASK_STATUS_CANCELLED, message="任务已取消", result=results)
+                return
             try:
                 url = item.get("url", "").strip()
                 filename = item.get("filename", "")
@@ -251,25 +280,36 @@ def process_batch_url_download_task(task_id: str, url_or_items, target_dir: str 
                     video_path = str(result["file_path"])
                     thumbnail_path = video_path.replace(".mp4", ".jpg")
                     extract_thumbnail(video_path, thumbnail_path)
-                    
+
+                    # 视频条目尝试获取平台字幕（音频条目跳过）
+                    subtitle_fetched = False
+                    if source_url and Path(video_path).suffix.lower() in (".mp4", ".webm", ".mkv", ".mov", ".avi"):
+                        sub_result = try_fetch_platform_subtitles(source_url, video_path)
+                        subtitle_fetched = bool(sub_result.get("fetched"))
+                        if subtitle_fetched:
+                            update_task(task_id, message=f"正在下载 {i + 1}/{total}（字幕获取成功）")
+
                     results.append({
                         "url": url,
                         "success": True,
                         "filename": result["filename"],
-                        "saved_path": result["saved_path"]
+                        "saved_path": result["saved_path"],
+                        "subtitle_fetched": subtitle_fetched
                     })
                 else:
                     results.append({
                         "url": url,
                         "success": False,
-                        "error": result.get("error", "下载失败")
+                        "error": result.get("error", "下载失败"),
+                        "subtitle_fetched": False
                     })
                     
             except Exception as e:
                 results.append({
                     "url": url,
                     "success": False,
-                    "error": str(e)
+                    "error": str(e),
+                    "subtitle_fetched": False
                 })
     else:
         # 传统的urls列表格式
@@ -277,6 +317,9 @@ def process_batch_url_download_task(task_id: str, url_or_items, target_dir: str 
         total = len(urls)
         
         for i, url in enumerate(urls):
+            if is_cancel_requested(task_id):
+                update_task(task_id, status=TASK_STATUS_CANCELLED, message="任务已取消", result=results)
+                return
             try:
                 url = url.strip()
                 if not url:
@@ -293,25 +336,36 @@ def process_batch_url_download_task(task_id: str, url_or_items, target_dir: str 
                     video_path = str(result["file_path"])
                     thumbnail_path = video_path.replace(".mp4", ".jpg")
                     extract_thumbnail(video_path, thumbnail_path)
-                    
+
+                    # 视频条目尝试获取平台字幕（音频条目跳过）
+                    subtitle_fetched = False
+                    if source_url and Path(video_path).suffix.lower() in (".mp4", ".webm", ".mkv", ".mov", ".avi"):
+                        sub_result = try_fetch_platform_subtitles(source_url, video_path)
+                        subtitle_fetched = bool(sub_result.get("fetched"))
+                        if subtitle_fetched:
+                            update_task(task_id, message=f"正在下载 {i + 1}/{total}（字幕获取成功）")
+
                     results.append({
                         "url": url,
                         "success": True,
                         "filename": result["filename"],
-                        "saved_path": result["saved_path"]
+                        "saved_path": result["saved_path"],
+                        "subtitle_fetched": subtitle_fetched
                     })
                 else:
                     results.append({
                         "url": url,
                         "success": False,
-                        "error": result.get("error", "下载失败")
+                        "error": result.get("error", "下载失败"),
+                        "subtitle_fetched": False
                     })
                     
             except Exception as e:
                 results.append({
                     "url": url,
                     "success": False,
-                    "error": str(e)
+                    "error": str(e),
+                    "subtitle_fetched": False
                 })
     
     update_task(task_id, 
@@ -1035,6 +1089,7 @@ async def upload_video_by_url(request: Request):
         target_dir = body.get("target_dir", "")
         filename = body.get("filename", "")
         media_type = body.get("media_type", "video")
+        source_url = body.get("source_url", "")
     except Exception:
         raise HTTPException(status_code=400, detail="请求参数解析失败")
 
@@ -1048,9 +1103,13 @@ async def upload_video_by_url(request: Request):
 
     if result["success"]:
         full_path = str(result["file_path"])
+        subtitle_fetched = False
         if media_type == "video":
             thumbnail_path = full_path.replace(".mp4", ".jpg")
             extract_thumbnail(full_path, thumbnail_path)
+            # 尝试获取平台字幕（如B站）
+            sub_result = try_fetch_platform_subtitles(source_url, full_path)
+            subtitle_fetched = bool(sub_result.get("fetched"))
 
         return {
             "success": True,
@@ -1059,6 +1118,7 @@ async def upload_video_by_url(request: Request):
             "media_type": media_type,
             "duration": result.get("duration", 0),
             "size": result.get("size", 0),
+            "subtitle_fetched": subtitle_fetched,
             "message": "下载成功"
         }
     else:
@@ -1224,7 +1284,7 @@ async def get_video(request: Request, path: str, thumbnail: bool = False, media_
 
 
 @app.post("/api/video/analyze", response_class=JSONResponse)
-async def analyze_video(path: str = "", background_tasks: BackgroundTasks = None, media_type: str = "video"):
+async def analyze_video(path: str = "", background_tasks: BackgroundTasks = None, media_type: str = "video", force: bool = False):
     if not path:
         raise HTTPException(status_code=400, detail="路径不能为空")
 
@@ -1238,11 +1298,11 @@ async def analyze_video(path: str = "", background_tasks: BackgroundTasks = None
         raise HTTPException(status_code=404, detail="文件不存在")
 
     # 创建异步任务
-    task_id = create_task("video_transcribe", {"path": path, "media_type": media_type})
+    task_id = create_task("video_transcribe", {"path": path, "media_type": media_type, "force": force})
 
     # 后台执行任务
     if background_tasks:
-        background_tasks.add_task(process_video_transcribe_task, task_id, str(file_path), media_type)
+        background_tasks.add_task(process_video_transcribe_task, task_id, str(file_path), media_type, force)
 
     return {
         "success": True,
@@ -1252,8 +1312,9 @@ async def analyze_video(path: str = "", background_tasks: BackgroundTasks = None
     }
 
 
-def process_video_transcribe_task(task_id: str, video_path: str, media_type: str = "video"):
+def process_video_transcribe_task(task_id: str, video_path: str, media_type: str = "video", force: bool = False):
     """处理视频/音频转录任务"""
+    cancel_check = lambda: is_cancel_requested(task_id)
     try:
         video_file = Path(video_path)
 
@@ -1263,6 +1324,22 @@ def process_video_transcribe_task(task_id: str, video_path: str, media_type: str
 
         base_dir = get_base_dir(media_type)
 
+        # 0. 短路：已存在字幕文件且未强制重跑时，跳过语音识别
+        subtitle_path = Path(video_path).parent / f"{Path(video_path).stem}_subtitle.md"
+        if not force and subtitle_path.exists():
+            try:
+                content = subtitle_path.read_text(encoding="utf-8")
+            except Exception:
+                content = ""
+            update_task(task_id, status=TASK_STATUS_COMPLETED, progress=100,
+                        message="已有字幕，跳过语音识别", result={
+                            "path": str(Path(video_path).relative_to(base_dir)) if str(Path(video_path)).startswith(str(base_dir)) else Path(video_path).name,
+                            "transcript": content,
+                            "source": "subtitle",
+                            "media_type": media_type,
+                        })
+            return
+
         # 1. 视频转 MP3 - 音频文件走旁路
         if media_type == "audio":
             update_task(task_id, status=TASK_STATUS_RUNNING, progress=5, message="检测到音频文件，跳过转码...")
@@ -1271,8 +1348,11 @@ def process_video_transcribe_task(task_id: str, video_path: str, media_type: str
                 audio_path = str(video_file)
             else:
                 audio_path = str(video_file.with_suffix(".mp3"))
-                convert_success, error_msg = video_to_audio(str(video_file), audio_path)
+                convert_success, error_msg = video_to_audio(str(video_file), audio_path, cancel_check=cancel_check)
                 if not convert_success:
+                    if error_msg == "已取消":
+                        update_task(task_id, status=TASK_STATUS_CANCELLED, message="任务已取消")
+                        return
                     update_task(
                         task_id,
                         status=TASK_STATUS_FAILED,
@@ -1284,8 +1364,11 @@ def process_video_transcribe_task(task_id: str, video_path: str, media_type: str
         else:
             update_task(task_id, status=TASK_STATUS_RUNNING, progress=5, message="正在转换视频到音频...")
             audio_path = str(video_file.with_suffix(".mp3"))
-            convert_success, error_msg = video_to_audio(str(video_file), audio_path)
+            convert_success, error_msg = video_to_audio(str(video_file), audio_path, cancel_check=cancel_check)
             if not convert_success:
+                if error_msg == "已取消":
+                    update_task(task_id, status=TASK_STATUS_CANCELLED, message="任务已取消")
+                    return
                 update_task(
                     task_id,
                     status=TASK_STATUS_FAILED,
@@ -1307,7 +1390,11 @@ def process_video_transcribe_task(task_id: str, video_path: str, media_type: str
             overall_progress = start_p + (progress / 100) * (end_p - start_p)
             update_task(task_id, status=TASK_STATUS_RUNNING, progress=int(overall_progress), message=message)
 
-        result = transcribe_audio(audio_path, language="auto", progress_callback=progress_callback)
+        result = transcribe_audio(audio_path, language="auto", progress_callback=progress_callback, cancel_check=cancel_check)
+
+        if result.get("cancelled"):
+            update_task(task_id, status=TASK_STATUS_CANCELLED, message="任务已取消")
+            return
 
         if result["success"]:
             update_task(task_id, status=TASK_STATUS_COMPLETED, progress=100, message="处理完成", result={
@@ -1379,6 +1466,7 @@ async def upload_batch_url(request: Request, background_tasks: BackgroundTasks):
         items = body.get("items", [])
         urls = body.get("urls", [])
         target_dir = body.get("target_dir", "")
+        source_url = body.get("source_url", "")
         
         # 优先使用items格式
         if items and len(items) > 0:
@@ -1392,7 +1480,7 @@ async def upload_batch_url(request: Request, background_tasks: BackgroundTasks):
         
         # 创建后台任务
         task_id = create_task("batch_url_download", task_data)
-        background_tasks.add_task(process_batch_url_download_task, task_id, items if items else urls, target_dir)
+        background_tasks.add_task(process_batch_url_download_task, task_id, items if items else urls, target_dir, source_url)
         
         return {
             "success": True,
@@ -1441,6 +1529,53 @@ async def list_tasks():
         "success": True,
         "tasks": get_all_tasks()
     }
+
+
+@app.post("/api/tasks/{task_id}/cancel", response_class=JSONResponse)
+async def cancel_task_endpoint(task_id: str):
+    """请求取消任务"""
+    result = cancel_task(task_id)
+    if not result.get("success"):
+        status_code = 404 if "不存在" in result.get("error", "") else 409
+        return JSONResponse(status_code=status_code, content={"success": False, "error": result.get("error")})
+    return {"success": True, "task": result["task"]}
+
+
+@app.get("/api/tasks/{task_id}/stream")
+async def stream_task_progress(task_id: str, request: Request):
+    """SSE 实时推送任务状态"""
+    import asyncio
+
+    async def event_generator():
+        last_snapshot = None
+        while True:
+            if await request.is_disconnected():
+                return
+            task = get_task(task_id)
+            if task is None:
+                yield f"event: end\ndata: {json.dumps({'error': '任务不存在'}, ensure_ascii=False)}\n\n"
+                return
+            snapshot = {
+                "id": task.get("id"),
+                "type": task.get("type"),
+                "status": task.get("status"),
+                "progress": task.get("progress", 0),
+                "message": task.get("message", ""),
+                "result": task.get("result"),
+            }
+            if snapshot != last_snapshot:
+                yield f"data: {json.dumps(snapshot, ensure_ascii=False)}\n\n"
+                last_snapshot = snapshot
+            if task.get("status") in [TASK_STATUS_COMPLETED, TASK_STATUS_FAILED, TASK_STATUS_CANCELLED]:
+                yield "event: end\ndata: {}\n\n"
+                return
+            await asyncio.sleep(0.4)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive"},
+    )
 
 
 @app.get("/api/tasks/{task_id}", response_class=JSONResponse)

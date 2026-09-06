@@ -8,7 +8,7 @@ import {
     bindSidebarEvents,
     bindParentMenuToggles
 } from '../pages/videos.js';
-import { switchPage, loadFiles, loadAudioFiles, startTasksPolling, stopTasksPolling, clearCompletedTasks, toggleSelectAll, clearSelection, startBatchTranscribe, createFolder, updateSelectedFilesList, uploadFile, uploadByUrl, initUrlUploadInput, analyzeVideo, generateSummary, generateNotes, generateOutline, renameFile, moveFile, deleteSelected, renderModelList, confirmModelSelect, fetchModels, addModelRow, saveModelsFromTable, saveSettings, switchProviderTab, openSettingsModal, openModelSelectModal, testConnection, openCleanupModal, confirmCleanup, onCleanupPickFolder, onCleanupPickedPathClick, onCleanupPickedClear, onCleanupSelectAll, onCleanupSelectNone, onCleanupExtChange, onCleanupTreeClick, closeCleanupModal } from '../pages/index-bridge.js';
+import { switchPage, loadFiles, loadAudioFiles, startTasksPolling, stopTasksPolling, clearCompletedTasks, toggleSelectAll, clearSelection, startBatchTranscribe, createFolder, updateSelectedFilesList, uploadFile, uploadByUrl, initUrlUploadInput, analyzeVideo, cancelAnalyzeTask, cancelUrlDownload, stopUrlDownloadTracking, generateSummary, generateNotes, generateOutline, renameFile, moveFile, deleteSelected, renderModelList, confirmModelSelect, fetchModels, addModelRow, saveModelsFromTable, saveSettings, switchProviderTab, openSettingsModal, openModelSelectModal, testConnection, openCleanupModal, confirmCleanup, onCleanupPickFolder, onCleanupPickedPathClick, onCleanupPickedClear, onCleanupSelectAll, onCleanupSelectNone, onCleanupExtChange, onCleanupTreeClick, closeCleanupModal } from '../pages/index-bridge.js';
 import { debounce } from './utils.js';
 import { state } from './state.js';
 
@@ -262,16 +262,21 @@ export function bindEvents() {
     // URL upload confirm
     const confirmUrlUploadBtn = document.getElementById('confirmUrlUpload');
     if (confirmUrlUploadBtn) confirmUrlUploadBtn.addEventListener('click', uploadByUrl);
+    // URL 下载进行中的「取消下载」（按钮随下载中条目动态渲染，用事件委托绑定）
+    const batchUrlProgressList = document.getElementById('batchUrlProgressList');
+    if (batchUrlProgressList) {
+        batchUrlProgressList.addEventListener('click', (e) => {
+            if (e.target.closest('.btn-cancel-url-download')) cancelUrlDownload();
+        });
+    }
     const cancelUrlUploadBtn = document.getElementById('cancelUrlUpload');
     if (cancelUrlUploadBtn) {
         cancelUrlUploadBtn.addEventListener('click', () => {
             document.getElementById('modalUrlUpload').classList.remove('show');
             const inp = document.getElementById('urlUploadInput');
             if (inp) inp.value = '';
-            if (state.urlPollingInterval) {
-                clearInterval(state.urlPollingInterval);
-                state.urlPollingInterval = null;
-            }
+            // 停止下载进度跟踪（轮询 / SSE 流），后台任务继续由任务中心跟踪
+            stopUrlDownloadTracking();
         });
     }
 
@@ -296,6 +301,8 @@ export function bindEvents() {
     // Video analysis
     const btnAnalyze = document.getElementById('btnAnalyze');
     if (btnAnalyze) btnAnalyze.addEventListener('click', analyzeVideo);
+    const btnCancelAnalyze = document.getElementById('btnCancelAnalyze');
+    if (btnCancelAnalyze) btnCancelAnalyze.addEventListener('click', cancelAnalyzeTask);
 
     // Generate buttons
     const btnGenSummary = document.getElementById('btnGenSummary');

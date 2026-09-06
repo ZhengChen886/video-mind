@@ -1,6 +1,8 @@
 import os
 import subprocess
 import shutil
+import tempfile
+import time
 from pathlib import Path
 from typing import Tuple, Optional, Dict, Any
 
@@ -81,13 +83,45 @@ def get_video_streams(video_path: str) -> Dict[str, Any]:
         return result
 
 
-def video_to_audio(video_path: str, output_audio_path: str = None) -> Tuple[bool, str]:
+def _run_ffmpeg_cancellable(cmd, cancel_check=None, cleanup_path=None) -> Tuple[bool, int, str]:
+    """
+    运行 ffmpeg 命令，支持协作式取消。
+
+    cancel_check 返回 True 时终止进程并删除未完成的输出文件（cleanup_path）。
+    stderr 重定向到临时文件而非管道，避免轮询期间 ffmpeg 进度输出写满
+    管道缓冲区导致进程阻塞死锁。
+
+    Returns:
+        (是否已取消, 进程返回码, stderr 输出内容)
+    """
+    with tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="ignore") as err_file:
+        process = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=err_file)
+        while process.poll() is None:
+            time.sleep(0.5)
+            if cancel_check and cancel_check():
+                process.terminate()
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                if cleanup_path:
+                    try:
+                        os.remove(cleanup_path)
+                    except OSError:
+                        pass
+                return True, 0, ""
+        err_file.seek(0)
+        return False, process.returncode, err_file.read()
+
+
+def video_to_audio(video_path: str, output_audio_path: str = None, cancel_check=None) -> Tuple[bool, str]:
     """
     将视频转换为音频（支持音频旁路：mp3 直接返回，其他音频转 mp3）
 
     Args:
         video_path: 视频/音频文件路径
         output_audio_path: 输出音频路径，默认为同目录同名.mp3
+        cancel_check: 可选的取消检查函数，返回 True 时终止转换（协作式取消）
 
     Returns:
         (是否成功, 错误信息) - 成功时错误信息为空字符串
@@ -123,9 +157,11 @@ def video_to_audio(video_path: str, output_audio_path: str = None) -> Tuple[bool
                 str(output_audio_path)
             ]
             print(f"[Video Processor] 音频转 MP3: {' '.join(cmd)}")
-            result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="ignore")
-            if result.returncode != 0:
-                error_lines = [l.strip() for l in (result.stderr or "").split("\n") if l.strip()]
+            cancelled, returncode, stderr_output = _run_ffmpeg_cancellable(cmd, cancel_check, output_audio_path)
+            if cancelled:
+                return False, "已取消"
+            if returncode != 0:
+                error_lines = [l.strip() for l in (stderr_output or "").split("\n") if l.strip()]
                 useful_error = "\n".join(error_lines[-5:]) if error_lines else "未知错误"
                 return False, f"音频转换失败：{useful_error}"
             if not output_path.exists() or output_path.stat().st_size == 0:
@@ -174,12 +210,14 @@ def video_to_audio(video_path: str, output_audio_path: str = None) -> Tuple[bool
         ]
         
         print(f"[Video Processor] 执行: {' '.join(cmd)}")
-        
-        result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="ignore")
-        
-        if result.returncode != 0:
+
+        cancelled, returncode, stderr_output = _run_ffmpeg_cancellable(cmd, cancel_check, output_audio_path)
+        if cancelled:
+            return False, "已取消"
+
+        if returncode != 0:
             # 提取有用的错误信息
-            error_lines = [l.strip() for l in (result.stderr or "").split("\n") if l.strip()]
+            error_lines = [l.strip() for l in (stderr_output or "").split("\n") if l.strip()]
             useful_error = "\n".join(error_lines[-5:]) if error_lines else "未知错误"
             print(f"[Video Processor] FFmpeg 错误: {useful_error}")
             return False, f"音频提取失败：{useful_error}"

@@ -257,10 +257,10 @@ def transcribe_segment(segment_data, segment_num):
 # 公共函数：供外部模块导入使用
 # ============================================
 
-def transcribe_audio(audio_path: str, language: str = "auto", progress_callback=None) -> dict:
+def transcribe_audio(audio_path: str, language: str = "auto", progress_callback=None, cancel_check=None) -> dict:
     """
     使用 SenseVoice 进行语音识别（智能分段 + GPU 加速）
-    
+
     Args:
         audio_path: 音频文件路径
         language: 识别语言，支持 auto/zh/en/yue/ja/ko
@@ -268,6 +268,7 @@ def transcribe_audio(audio_path: str, language: str = "auto", progress_callback=
             phase: "loading", "segmenting", "transcribing", "saving"
             progress: 0-100 进度值
             message: 进度消息
+        cancel_check: 可选的取消检查函数，返回 True 时中止识别（协作式取消）
     
     Returns:
         dict: 包含识别结果的字典
@@ -285,6 +286,16 @@ def transcribe_audio(audio_path: str, language: str = "auto", progress_callback=
     
     from .gpu_performance_monitor import GPUPerformanceMonitor
     try:
+        # 协作式取消：在加载模型等任何耗时操作之前检查
+        if cancel_check and cancel_check():
+            return {
+                "success": False,
+                "cancelled": True,
+                "error": "已取消",
+                "text": "",
+                "language": "unknown",
+            }
+
         monitor = GPUPerformanceMonitor(interval=0.5)
         monitor.start_monitoring()
         
@@ -314,7 +325,19 @@ def transcribe_audio(audio_path: str, language: str = "auto", progress_callback=
         for i, (seg_start, seg_end) in enumerate(segments):
             seg_num = i + 1
             overall_progress = 20 + (seg_num / len(segments) * 75)
-            
+
+            # 协作式取消：直接返回，不写入任何半成品结果文件
+            if cancel_check and cancel_check():
+                update_progress("transcribing", overall_progress, "任务已取消")
+                monitor.stop_monitoring()
+                return {
+                    "success": False,
+                    "cancelled": True,
+                    "error": "已取消",
+                    "text": "",
+                    "language": "unknown",
+                }
+
             if seg_num % 5 == 0 or seg_num == len(segments):
                 elapsed = time.time() - start_time
                 eta = (elapsed / seg_num) * (len(segments) - seg_num) if seg_num > 0 else 0
