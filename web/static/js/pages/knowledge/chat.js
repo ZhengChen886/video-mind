@@ -4,6 +4,7 @@
 // 内部仍依赖 KnowledgeAPI（来自 api.js）
 // ============================
 import { showToast } from '../../core/utils.js';
+import * as ChatSteps from './chat_steps.js';
 
 let _api = null;
 let _state = null;
@@ -44,56 +45,249 @@ function markdownToHtml(text) {
 export async function sendMessage() {
     const input = document.getElementById('chat-input');
     if (!input || !input.value.trim()) return;
-    if (!_state.currentDoc) {
+
+    const chatMode = _state.chatMode || 'single';
+    const selectedDocs = _state.selectedDocs || [];
+
+    // 模式校验
+    if (chatMode === 'multi') {
+        if (selectedDocs.length === 0) {
+            showToast('多选模式下请先勾选至少一个文档', 'warning');
+            return;
+        }
+    } else if (chatMode === 'collection') {
+        // 全库问答无需选择文档
+    } else if (!_state.currentDoc) {
         showToast('请先选择文档', 'warning');
         return;
     }
+
     const question = input.value.trim();
     input.value = '';
-    addMessage('user', question);
+    const userMessageId = addMessage('user', question);
+
+    // 在用户消息下方插入多步骤进度条（单文档路径不展示 rerank 步）
+    ChatSteps.ensureStepContainer(userMessageId, { showRerank: chatMode !== 'single' });
+
+    // assistant 占位消息 id（供 catch 分支更新错误信息）
+    let assistantId = null;
+
     try {
         showTypingIndicator();
         const historyBeforeAdd = _state.messages.slice(0, -1);
         const currentConvId = _state.currentConversation?.id;
         const modelToUse = _state.selectedModel;
-        const response = await _api.chat(
-            _state.currentDoc.path,
-            question,
-            historyBeforeAdd.slice(-20),
-            modelToUse,
-            currentConvId
-        );
+
+        // ---------- 索引中：多选模式自动 force 批量重索引 ----------
+        if (chatMode === 'multi') {
+            ChatSteps.setStepState(userMessageId, 'index', 'running');
+            const items = selectedDocs.map(d => ({ path: d.path, type: 'file' }));
+            try {
+                const r = await _api.batchIndex(items, true); // force=true
+                if (r && r.success) {
+                    const d = r.data || {};
+                    ChatSteps.setStepState(
+                        userMessageId, 'index', 'done',
+                        `成功 ${d.indexed_count ?? 0}，跳过 ${d.skipped_count ?? 0}，失败 ${d.failed_count ?? 0}`
+                    );
+                } else {
+                    ChatSteps.setStepState(
+                        userMessageId, 'index', 'failed',
+                        (r && r.error) ? r.error : '批量索引返回失败'
+                    );
+                }
+            } catch (e) {
+                ChatSteps.setStepState(userMessageId, 'index', 'failed', e?.message || '索引异常');
+            }
+        } else {
+            // 单文档 / 全库问答：跳过"索引中"步骤（单文档已有 reindex，全库不需要预索引）
+            ChatSteps.setStepState(userMessageId, 'index', 'done', '无需索引');
+        }
+
+        // ---------- 检索中（SSE 流开始时由 retrieve 事件标记 done） ----------
+        ChatSteps.setStepState(userMessageId, 'retrieve', 'running');
+
+        // ---------- 思考中（流式生成开始） ----------
+        ChatSteps.setStepState(userMessageId, 'think', 'running');
         hideTypingIndicator();
-        if (response.success) {
-            addMessage('assistant', response.data.answer);
-            if (response.data.conv_id && (!_state.currentConversation || _state.currentConversation.id !== response.data.conv_id)) {
-                const convResponse = await _api.getConversation(response.data.conv_id);
-                if (convResponse.success && convResponse.data) {
-                    _state.currentConversation = convResponse.data;
+
+        // 创建 assistant 占位消息（流式渲染用）
+        assistantId = addMessage('assistant', '');
+        const chatContainer = document.getElementById('chat-messages');
+        let msgEl = chatContainer
+            ? chatContainer.querySelector(`[data-message-id="${assistantId}"]`)
+            : null;
+        let contentEl = msgEl ? msgEl.querySelector('.message-content') : null;
+        let accumulated = '';
+        let retrieveDone = false;
+
+        // SSE 事件处理：流式渲染文本 + 工具调用卡片 + 步骤条状态
+        const handleEvent = (event) => {
+            const type = event.type;
+            if (type === 'retrieve') {
+                const srcCount = Array.isArray(event.sources) ? event.sources.length : 0;
+                ChatSteps.setStepState(
+                    userMessageId, 'retrieve', 'done',
+                    srcCount > 0 ? `召回 ${srcCount} 段` : '未召回'
+                );
+                if (chatMode !== 'single') {
+                    ChatSteps.setStepState(userMessageId, 'rerank', 'done', '精排完成');
+                }
+                retrieveDone = true;
+            } else if (type === 'assistant') {
+                accumulated += event.content || '';
+                if (contentEl) {
+                    contentEl.innerHTML = markdownToHtml(accumulated);
+                    if (chatContainer) chatContainer.scrollTop = chatContainer.scrollHeight;
+                }
+            } else if (type === 'tool_call') {
+                // 工具调用占位卡片
+                if (msgEl) {
+                    const card = document.createElement('div');
+                    card.className = 'chat-tool-card';
+                    card.dataset.toolId = event.id || '';
+                    card.style.cssText = 'display:flex;align-items:center;gap:6px;margin:6px 0;padding:6px 10px;background:#f0f4ff;border:1px solid #d6e0f5;border-radius:6px;font-size:13px;color:#3a5a8c;';
+                    card.innerHTML = `<span>🔧</span><span style="font-weight:600">${escapeHtml(event.name || '')}</span><span style="color:#888">执行中…</span>`;
+                    msgEl.appendChild(card);
+                    if (chatContainer) chatContainer.scrollTop = chatContainer.scrollHeight;
+                }
+            } else if (type === 'tool_response') {
+                // 更新工具卡片结果
+                if (msgEl) {
+                    const cards = msgEl.querySelectorAll('.chat-tool-card');
+                    for (const card of cards) {
+                        if (card.dataset.toolId === (event.tool_call_id || '')) {
+                            const statusEl = card.querySelector('span:last-child');
+                            if (statusEl) {
+                                let brief = event.output || '';
+                                try {
+                                    const parsed = JSON.parse(brief);
+                                    brief = parsed.error || (typeof parsed === 'string' ? parsed : JSON.stringify(parsed));
+                                } catch (e) { /* 非 JSON，原样展示 */ }
+                                statusEl.textContent = '✓ ' + String(brief).slice(0, 80);
+                                statusEl.style.color = '#2e7d32';
+                            }
+                            break;
+                        }
+                    }
                 }
             }
-            const { loadConversations } = await import('./sidebar.js');
-            await loadConversations();
+        };
+
+        // ---------- SSE 流式请求（fetch + ReadableStream） ----------
+        let result;
+        if (chatMode === 'multi') {
+            // 多文档问答（$in 一次检索 + Reranker 二次排序）
+            result = await _api.chatMultiStream(
+                selectedDocs.map(d => d.path),
+                question,
+                historyBeforeAdd.slice(-20),
+                modelToUse,
+                currentConvId,
+                true,
+                handleEvent
+            );
+        } else if (chatMode === 'collection') {
+            // 全库问答
+            result = await _api.chatCollectionStream(
+                question,
+                historyBeforeAdd.slice(-20),
+                modelToUse,
+                currentConvId,
+                true,
+                handleEvent
+            );
         } else {
-            addMessage('assistant', `错误: ${response.error}`);
+            // 单文档问答（原有逻辑）
+            result = await _api.chatStream(
+                _state.currentDoc.path,
+                question,
+                historyBeforeAdd.slice(-20),
+                modelToUse,
+                currentConvId,
+                handleEvent
+            );
         }
+
+        // ---------- 流式完成：步骤条收尾 ----------
+        ChatSteps.setStepState(userMessageId, 'think', 'done', '已生成回答');
+        if (!retrieveDone) {
+            const srcCount = Array.isArray(result.extra.sources) ? result.extra.sources.length : 0;
+            ChatSteps.setStepState(
+                userMessageId, 'retrieve', 'done',
+                srcCount > 0 ? `召回 ${srcCount} 段` : '未召回'
+            );
+            if (chatMode !== 'single') {
+                ChatSteps.setStepState(userMessageId, 'rerank', 'done', '精排完成');
+            }
+        }
+
+        // 更新 state 中的 assistant 消息为完整回答，最终 markdown 渲染（保留工具卡片 DOM）
+        const finalAnswer = result.answer || '';
+        const lastMsg = (_state.messages || []).find(m => m._id === assistantId);
+        if (lastMsg) lastMsg.content = finalAnswer;
+        if (contentEl) contentEl.innerHTML = markdownToHtml(finalAnswer);
+
+        const data = result.extra || {};
+        // 提示用户上下文已被截断，数据可能不完整
+        if (data.truncated) {
+            showToast('知识库数据量过大，部分上下文已被截断，回答可能不完整', 'warning');
+        }
+
+        // 来源文档标注（多文档/全库问答时展示，不写入消息数组）
+        const sources = data.sources;
+        if (Array.isArray(sources) && sources.length > 0 && chatMode !== 'single') {
+            const sourceNames = [...new Set(sources.map(s => {
+                const docId = s?.metadata?.doc_id || '';
+                return docId.split(/[\\/]/).pop() || docId;
+            }).filter(Boolean))];
+            if (sourceNames.length > 0) {
+                appendSourceBar(sourceNames);
+            }
+        }
+        if (result.convId && (!_state.currentConversation || _state.currentConversation.id !== result.convId)) {
+            const convResponse = await _api.getConversation(result.convId);
+            if (convResponse.success && convResponse.data) {
+                _state.currentConversation = convResponse.data;
+            }
+        }
+        const { loadConversations } = await import('./sidebar.js');
+        await loadConversations();
+
+        // 给用户 1.5 秒看清步骤条"全部 ✓"再淡出
+        setTimeout(() => ChatSteps.removeStepContainer(userMessageId), 1500);
     } catch (error) {
         hideTypingIndicator();
-        addMessage('assistant', `请求失败: ${error.message}`);
+        ChatSteps.setStepState(userMessageId, 'think', 'failed', error?.message || '请求失败');
+        if (assistantId) {
+            // 更新占位消息为错误信息（避免出现空消息）
+            const lastMsg = (_state.messages || []).find(m => m._id === assistantId);
+            if (lastMsg) lastMsg.content = `请求失败: ${error.message}`;
+            renderChatMessages();
+        } else {
+            addMessage('assistant', `请求失败: ${error.message}`);
+        }
+        setTimeout(() => ChatSteps.removeStepContainer(userMessageId), 1500);
     }
 }
 
 export function addMessage(role, content) {
     if (!_state) return;
     if (!Array.isArray(_state.messages)) _state.messages = [];
-    _state.messages.push({ role, content });
+    const messageId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    _state.messages.push({ role, content, _id: messageId });
     renderChatMessages();
+    return messageId;
 }
 
 export function renderChatMessages() {
     const container = document.getElementById('chat-messages');
     if (!container) return;
     if (!_state) return;
+    // 保留外部步骤条（多步骤进度条）—— renderChatMessages 重写 innerHTML 时不能丢
+    const preservedSteps = Array.from(container.querySelectorAll(':scope > .chat-steps'));
     const messages = Array.isArray(_state.messages) ? _state.messages : [];
     if (messages.length === 0) {
         container.innerHTML = `<div class="empty-hint">${_state.currentDoc ? '开始提问吧！' : '请先在左侧选择一个文档'}</div>`;
@@ -110,7 +304,7 @@ export function renderChatMessages() {
             contentHtml = escapeHtml(msg.content);
             contentClass = 'message-content';
         }
-        html += `<div class="chat-message ${msg.role}" data-content="${escapeHtml(msg.content)}" data-index="${index}">`;
+        html += `<div class="chat-message ${msg.role}" data-content="${escapeHtml(msg.content)}" data-index="${index}"${msg._id ? ` data-message-id="${escapeHtml(msg._id)}"` : ''}>`;
         if (msg.role === 'assistant') {
             html += `<div class="message-actions">
                     <button class="btn-favorite" title="收藏">
@@ -146,6 +340,19 @@ export function renderChatMessages() {
         html += '</div>';
     });
     container.innerHTML = html;
+    // 把保留的步骤条 append 回去
+    preservedSteps.forEach(s => container.appendChild(s));
+    container.scrollTop = container.scrollHeight;
+}
+
+// 来源标注条：直接渲染到聊天区末尾（不写入 _state.messages）
+function appendSourceBar(sourceNames) {
+    const container = document.getElementById('chat-messages');
+    if (!container) return;
+    const bar = document.createElement('div');
+    bar.className = 'chat-source-bar';
+    bar.innerHTML = `📄 参考来源：${sourceNames.map(escapeHtml).join('、')}`;
+    container.appendChild(bar);
     container.scrollTop = container.scrollHeight;
 }
 
@@ -254,14 +461,43 @@ export async function loadConversation(convId, autoLoadDoc = true) {
                 console.error('[loadConversation] renderConversationList 失败:', e);
             }
             if (autoLoadDoc && response.data && response.data.doc_id) {
-                console.log('[loadConversation] 加载关联文档:', response.data.doc_id);
-                try {
-                    const { selectDocument } = await import('./doc_preview.js');
-                    await selectDocument(response.data.doc_id);
-                } catch (e) {
-                    console.error('[loadConversation] selectDocument 失败:', e, e?.stack || '');
-                    // selectDocument 自身有 try/catch 一般不会冒泡，这里兜底
-                    showToast('加载关联文档失败：' + (e?.message || e), 'error');
+                const rawDocId = response.data.doc_id;
+                // 全库问答对话：恢复 collection 模式，不加载单文档
+                if (rawDocId === '__collection__') {
+                    _state.chatMode = 'collection';
+                    _state.multiSelectMode = false;
+                    _state.selectedDocs = [];
+                    const { updateMultiDocBar } = await import('./multi_doc.js');
+                    updateMultiDocBar();
+                } else if (typeof rawDocId === 'string' && rawDocId.trim().startsWith('[')) {
+                    // 多文档对话（doc_id 为 JSON 数组字符串）：恢复 multi 模式与已选列表
+                    try {
+                        const docIds = JSON.parse(rawDocId);
+                        if (Array.isArray(docIds) && docIds.length > 0) {
+                            _state.chatMode = 'multi';
+                            _state.multiSelectMode = true;
+                            _state.selectedDocs = docIds.map(p => ({
+                                path: p,
+                                name: String(p).split(/[\\/]/).pop() || p
+                            }));
+                            const { updateMultiDocBar } = await import('./multi_doc.js');
+                            updateMultiDocBar();
+                            const { renderFileList } = await import('./sidebar.js');
+                            renderFileList();
+                        }
+                    } catch (e) {
+                        console.warn('[loadConversation] 多文档 doc_id 解析失败，忽略:', e);
+                    }
+                } else {
+                    console.log('[loadConversation] 加载关联文档:', rawDocId);
+                    try {
+                        const { selectDocument } = await import('./doc_preview.js');
+                        await selectDocument(rawDocId);
+                    } catch (e) {
+                        console.error('[loadConversation] selectDocument 失败:', e, e?.stack || '');
+                        // selectDocument 自身有 try/catch 一般不会冒泡，这里兜底
+                        showToast('加载关联文档失败：' + (e?.message || e), 'error');
+                    }
                 }
             }
         } else {

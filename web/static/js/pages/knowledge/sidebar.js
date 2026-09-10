@@ -106,11 +106,19 @@ export function renderFileTreeItems(items, depth) {
         } else {
             const indentStyle = `padding-left: ${depth * 16}px`;
             const isActive = _state.currentDoc?.path === item.path;
+            // 多选模式：显示复选框并高亮已选
+            const multiMode = !!_state.multiSelectMode;
+            const isSelected = (_state.selectedDocs || []).some(d => d.path === item.path);
             return `
-                <div class="file-item ${isActive ? 'active' : ''}"
+                <div class="file-item ${isActive ? 'active' : ''} ${multiMode && isSelected ? 'multi-selected' : ''}"
                      data-path="${escapeHtml(item.path)}"
                      data-name="${escapeHtml(item.name)}"
                      style="${indentStyle}">
+                    ${multiMode ? `
+                        <span class="file-checkbox ${isSelected ? 'checked' : ''}">
+                            ${isSelected ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
+                        </span>
+                    ` : ''}
                     <svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                         <polyline points="14 2 14 8 20 8"/>
@@ -296,7 +304,16 @@ export function renderConversationList() {
     // 兜底：防止 _state.conversations 异常为 null/undefined 时抛 TypeError
     const allConversations = Array.isArray(_state.conversations) ? _state.conversations : [];
     let filteredConversations = allConversations;
-    if (_state.currentDoc) {
+
+    if (_state.chatMode === 'collection') {
+        // 全库问答模式：只显示全库对话
+        filteredConversations = allConversations.filter(conv => conv.doc_id === '__collection__');
+    } else if (_state.multiSelectMode) {
+        // 多选模式：显示多文档对话（doc_id 为 JSON 数组字符串）
+        filteredConversations = allConversations.filter(
+            conv => typeof conv.doc_id === 'string' && conv.doc_id.trim().startsWith('[')
+        );
+    } else if (_state.currentDoc) {
         filteredConversations = allConversations.filter(
             conv => conv.doc_id === _state.currentDoc.path
         );

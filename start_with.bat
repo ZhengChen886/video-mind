@@ -74,7 +74,7 @@ echo.
 
 :emit_env
 REM --- Step 3: read JSON, emit set commands to a temp .bat ---
-"%BOOTSTRAP_PY%" -c "import json,sys; c=json.load(open(sys.argv[1],'r',encoding='utf-8')); p=c.get('python',{}).get('exe',''); f=c.get('ffmpeg',{}).get('bin_dir',''); m=c.get('modelscope',{}); print('set \"PYTHON_EXE=%%s\"' %% p); print('set \"FFMPEG_DIR=%%s\"' %% f); print('set \"MODELSCOPE_CACHE=%%s\"' %% m.get('cache_dir','')); print('set \"HF_HOME=%%s\"' %% m.get('hf_home','')); print('set \"ASR_MODEL_DIR=%%s\"' %% m.get('asr_model_dir',''))" "%CONFIG_FILE%" 1>"%TMP_ENV%" 2>nul
+"%BOOTSTRAP_PY%" -c "import json,sys; c=json.load(open(sys.argv[1],'r',encoding='utf-8')); p=c.get('python',{}).get('exe',''); f=c.get('ffmpeg',{}).get('bin_dir',''); m=c.get('modelscope',{}); r=c.get('rag',{}); print('set \"PYTHON_EXE=%%s\"' %% p); print('set \"FFMPEG_DIR=%%s\"' %% f); print('set \"MODELSCOPE_CACHE=%%s\"' %% m.get('cache_dir','')); print('set \"HF_HOME=%%s\"' %% m.get('hf_home','')); print('set \"ASR_MODEL_DIR=%%s\"' %% m.get('asr_model_dir','')); print('set \"EMBEDDING_DIR=%%s\"' %% r.get('embedding_model','')); print('set \"RERANKER_DIR=%%s\"' %% r.get('reranker_model',''))" "%CONFIG_FILE%" 1>"%TMP_ENV%" 2>nul
 if errorlevel 1 (
     echo [ERROR] Failed to read config: %CONFIG_FILE%
     echo         Config file may be malformed. Delete it and re-run to reconfigure.
@@ -127,10 +127,13 @@ echo  Python:      %PYTHON_EXE%
 if defined FFMPEG_DIR if not "%FFMPEG_DIR%"=="" echo  FFmpeg:      %FFMPEG_DIR%\ffmpeg.exe
 if defined MODELSCOPE_CACHE if not "%MODELSCOPE_CACHE%"=="" echo  ModelScope:  %MODELSCOPE_CACHE%
 if defined ASR_MODEL_DIR if not "%ASR_MODEL_DIR%"=="" echo  ASR Model:   %ASR_MODEL_DIR%
+if defined EMBEDDING_DIR if not "%EMBEDDING_DIR%"=="" echo  Embedding:   %EMBEDDING_DIR%
+if defined RERANKER_DIR if not "%RERANKER_DIR%"=="" echo  Reranker:    %RERANKER_DIR%
 echo ============================================================
+echo  Logs will be printed directly to this console.
 echo.
 
-"%PYTHON_EXE%" server.py
+"%PYTHON_EXE%" -u server.py
 set "RC=%errorlevel%"
 echo.
 echo === server.py exited with code: %RC% ===

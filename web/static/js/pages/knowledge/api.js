@@ -76,6 +76,56 @@ const KnowledgeAPI = {
         return this.request(`/knowledge/index/status?doc_id=${encodeURIComponent(docId)}`);
     },
 
+    // ========== RAG 多文件/文件夹知识库改造 ==========
+
+    async scanFolder(path) {
+        return this.request(`/knowledge/scan-folder?path=${encodeURIComponent(path)}`);
+    },
+
+    async batchIndex(items, force = false) {
+        return this.request('/knowledge/index/batch', {
+            method: 'POST',
+            body: JSON.stringify({ items, force })
+        });
+    },
+
+    async chatMulti(docIds, question, history = [], model = null, convId = null, useReranker = true) {
+        const payload = {
+            doc_ids: docIds,
+            question,
+            history,
+            use_reranker: useReranker
+        };
+        if (model) {
+            payload.model = model;
+        }
+        if (convId) {
+            payload.conv_id = convId;
+        }
+        return this.request('/knowledge/chat/multi', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+    },
+
+    async chatCollection(question, history = [], model = null, convId = null, useReranker = true) {
+        const payload = {
+            question,
+            history,
+            use_reranker: useReranker
+        };
+        if (model) {
+            payload.model = model;
+        }
+        if (convId) {
+            payload.conv_id = convId;
+        }
+        return this.request('/knowledge/chat/collection', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+    },
+
     async chat(docId, question, history = [], model = null, convId = null) {
         const payload = {
             doc_id: docId,
@@ -92,6 +142,87 @@ const KnowledgeAPI = {
             method: 'POST',
             body: JSON.stringify(payload)
         });
+    },
+
+    // ========== SSE 流式聊天（fetch + ReadableStream 解析） ==========
+
+    /**
+     * 发起 SSE 流式聊天请求
+     * @param {string} endpoint 聊天端点（如 /knowledge/chat）
+     * @param {object} payload 请求体
+     * @param {Function} onEvent 事件回调 (event) => void
+     * @returns {Promise<object>} { answer, convId, extra } 聚合结果
+     */
+    async streamChat(endpoint, payload, onEvent) {
+        const response = await fetch(`${API_BASE}${endpoint}?stream=1`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!response.ok || !response.body) {
+            let detail = `HTTP ${response.status}`;
+            try { const d = await response.json(); detail = (d && (d.error || d.message)) || detail; } catch (e) { /* ignore */ }
+            throw new Error(detail);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+        let fullAnswer = '';
+        let convId = null;
+        let extra = {};
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            let sep;
+            while ((sep = buffer.indexOf('\n\n')) !== -1) {
+                const frame = buffer.slice(0, sep);
+                buffer = buffer.slice(sep + 2);
+                for (const line of frame.split('\n')) {
+                    if (!line.startsWith('data:')) continue;
+                    const raw = line.slice(5).trim();
+                    if (!raw) continue;
+                    let event;
+                    try { event = JSON.parse(raw); } catch (e) { console.warn('[SSE] 解析失败:', raw); continue; }
+                    const type = event.type;
+                    if (type === 'assistant') {
+                        fullAnswer += event.content || '';
+                    } else if (type === 'finish') {
+                        fullAnswer = event.answer || fullAnswer;
+                    } else if (type === 'done') {
+                        convId = event.conv_id || null;
+                        extra = event;
+                    } else if (type === 'error') {
+                        throw new Error(event.error || '流式请求失败');
+                    }
+                    if (typeof onEvent === 'function') onEvent(event);
+                }
+            }
+        }
+        return { answer: fullAnswer, convId, extra };
+    },
+
+    async chatStream(docId, question, history = [], model = null, convId = null, onEvent = null) {
+        const payload = { doc_id: docId, question, history };
+        if (model) payload.model = model;
+        if (convId) payload.conv_id = convId;
+        return this.streamChat('/knowledge/chat', payload, onEvent);
+    },
+
+    async chatMultiStream(docIds, question, history = [], model = null, convId = null, useReranker = true, onEvent = null) {
+        const payload = { doc_ids: docIds, question, history, use_reranker: useReranker };
+        if (model) payload.model = model;
+        if (convId) payload.conv_id = convId;
+        return this.streamChat('/knowledge/chat/multi', payload, onEvent);
+    },
+
+    async chatCollectionStream(question, history = [], model = null, convId = null, useReranker = true, onEvent = null) {
+        const payload = { question, history, use_reranker: useReranker };
+        if (model) payload.model = model;
+        if (convId) payload.conv_id = convId;
+        return this.streamChat('/knowledge/chat/collection', payload, onEvent);
     },
 
     async listConversations() {

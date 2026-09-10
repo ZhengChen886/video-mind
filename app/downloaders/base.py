@@ -17,7 +17,7 @@ QUALITY_MAP = {
 class Downloader(ABC):
     def __init__(self):
         self.quality = QUALITY_MAP.get('fast')
-        from config.paths import DATA_DIR
+        from app.config.paths import DATA_DIR
         self.cache_data = str(DATA_DIR)
 
     @abstractmethod

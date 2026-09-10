@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from .video_processor import get_video_duration
-from config.paths import VIDEO_DIR, AUDIO_DIR
+from app.config.paths import VIDEO_DIR, AUDIO_DIR
 
 # 支持的视频格式
 SUPPORTED_VIDEO_EXTENSIONS = {".mp4", ".m4v", ".webm", ".mov", ".avi", ".wmv", ".flv", ".mkv"}

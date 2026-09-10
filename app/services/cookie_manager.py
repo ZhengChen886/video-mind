@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Optional, Dict, List
 
-from config.paths import CONFIG_DIR
+from app.config.paths import CONFIG_DIR
 
 
 class CookieConfigManager:

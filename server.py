@@ -12,6 +12,8 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from typing import List, Dict, Any
 import uvicorn
+import logging
+logging.basicConfig(level=logging.INFO, format='%(levelname)s  %(message)s')
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request, BackgroundTasks
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
@@ -383,7 +385,7 @@ PROJECT_ROOT = Path(__file__).parent.absolute()
 # ============================================================
 # 配置管理
 # ============================================================
-import config.config_manager as config_manager
+import app.config.config_manager as config_manager
 
 def load_config():
     return config_manager.load_config()

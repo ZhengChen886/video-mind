@@ -221,5 +221,4 @@ __marimo__/
 data/
 .trae/
 vector_db/
-config/config.json
-config/downloader.json
+config/

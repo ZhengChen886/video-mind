@@ -10,3 +10,14 @@ huggingface_hub>=0.20.0
 edge-tts>=6.1.0
 yt-dlp>=2024.5.27
 
+# RAG 多文件/文件夹知识库问答
+chromadb>=0.4.0
+# Reranker（CrossEncoder 二次精排）使用 transformers 直接实现；
+# 不用 sentence-transformers：其导入链在部分 Windows 环境触发 pyarrow 原生崩溃
+torch>=2.0.0
+transformers>=4.40.0
+openai>=1.0.0
+# 可选：批量索引 PDF / DOCX 文件时需要
+# pypdf>=3.0.0
+# python-docx>=1.1.0
+

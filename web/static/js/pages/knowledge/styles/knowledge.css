@@ -1079,3 +1079,280 @@
 .modal-overlay.open {
     display: flex;
 }
+
+/* ========== RAG 多文档/文件夹知识库改造 ========== */
+
+/* 多文档工具栏 */
+.multi-doc-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 16px;
+    border-top: 1px solid var(--border-color, #e0e0e0);
+    background: var(--card-bg, #fafafa);
+}
+
+.multi-doc-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.btn-multidoc {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border: 1px solid var(--border-color, #e0e0e0);
+    border-radius: 6px;
+    background: var(--card-bg, #fff);
+    color: var(--text-primary, #333);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-multidoc svg {
+    width: 14px;
+    height: 14px;
+}
+
+.btn-multidoc:hover {
+    border-color: var(--primary-color, #4a90d9);
+    color: var(--primary-color, #4a90d9);
+}
+
+.btn-multidoc.active {
+    background: var(--primary-light, #e8f0fb);
+    border-color: var(--primary-color, #4a90d9);
+    color: var(--primary-color, #4a90d9);
+}
+
+/* 已选文档 chips */
+.multi-doc-selected {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.multi-doc-selected-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    flex: 1;
+    max-height: 72px;
+    overflow-y: auto;
+}
+
+.doc-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    background: var(--primary-light, #e8f0fb);
+    color: var(--primary-color, #4a90d9);
+    border-radius: 12px;
+    font-size: 12px;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.doc-chip-remove {
+    border: none;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    padding: 0 2px;
+}
+
+.doc-chip-remove:hover {
+    color: #e74c3c;
+}
+
+.btn-multidoc-clear {
+    border: none;
+    background: transparent;
+    color: var(--text-muted, #999);
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.btn-multidoc-clear:hover {
+    color: #e74c3c;
+}
+
+/* 文件树复选框（多选模式） */
+.file-checkbox {
+    width: 16px;
+    height: 16px;
+    min-width: 16px;
+    border: 1.5px solid var(--border-color, #ccc);
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 2px;
+}
+
+.file-checkbox.checked {
+    background: var(--primary-color, #4a90d9);
+    border-color: var(--primary-color, #4a90d9);
+    color: #fff;
+}
+
+.file-checkbox svg {
+    width: 12px;
+    height: 12px;
+}
+
+.file-item.multi-selected {
+    background: var(--primary-light, #e8f0fb);
+}
+
+/* 来源标注条 */
+.chat-source-bar {
+    margin: 4px 12px;
+    padding: 6px 12px;
+    font-size: 12px;
+    color: var(--text-muted, #888);
+    background: var(--card-bg, #f7f7f7);
+    border-left: 3px solid var(--primary-color, #4a90d9);
+    border-radius: 4px;
+}
+
+/* 扫描文件夹预览 */
+.scan-folder-preview {
+    margin-top: 12px;
+    border: 1px solid var(--border-color, #e0e0e0);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.scan-folder-summary {
+    padding: 8px 12px;
+    font-size: 13px;
+    color: var(--text-primary, #333);
+    background: var(--primary-light, #e8f0fb);
+}
+
+.scan-folder-files {
+    max-height: 260px;
+    overflow-y: auto;
+    padding: 4px 0;
+}
+
+.scan-file-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 12px;
+    font-size: 12px;
+}
+
+.scan-file-row:hover {
+    background: var(--primary-light, #f0f6ff);
+}
+
+.scan-file-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary, #333);
+}
+
+.scan-file-meta {
+    color: var(--text-muted, #999);
+    white-space: nowrap;
+}
+
+.scan-file-more {
+    padding: 4px 12px;
+    font-size: 12px;
+    color: var(--text-muted, #999);
+    text-align: center;
+}
+
+/* 多步骤对话展示（索引 / 检索 / 重排序 / 思考） */
+.chat-steps {
+    margin: 4px 12px;
+    padding: 10px 12px;
+    background: #f7f9fc;
+    border-left: 3px solid var(--primary-color, #4a90d9);
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-primary, #333);
+    animation: chat-steps-in 0.2s ease-out;
+}
+
+@keyframes chat-steps-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.chat-step {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    line-height: 1.4;
+}
+
+.chat-step-icon {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    line-height: 1;
+}
+
+.chat-step.pending .chat-step-icon::before {
+    content: '○';
+    color: #aaa;
+}
+
+.chat-step.running .chat-step-icon::before {
+    content: '◐';
+    color: var(--primary-color, #4a90d9);
+    animation: chat-step-spin 1.2s linear infinite;
+    display: inline-block;
+}
+
+@keyframes chat-step-spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
+.chat-step.done .chat-step-icon::before {
+    content: '✓';
+    color: #2e9e4f;
+    font-weight: bold;
+}
+
+.chat-step.failed .chat-step-icon::before {
+    content: '✕';
+    color: #d9534f;
+    font-weight: bold;
+}
+
+.chat-step-label {
+    font-weight: 500;
+    min-width: 80px;
+}
+
+.chat-step-sub {
+    color: var(--text-muted, #888);
+    font-size: 12px;
+    margin-left: auto;
+}

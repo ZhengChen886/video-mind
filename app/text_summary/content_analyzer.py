@@ -3,7 +3,7 @@ import re
 import time
 from typing import List, Dict, Any, Optional
 
-import config.config_manager
+import app.config.config_manager as config_manager
 
 try:
     from openai import OpenAI
@@ -11,7 +11,7 @@ try:
 except ImportError:
     OPENAI_AVAILABLE = False
 
-client = config.config_manager.create_openai_client()
+client = config_manager.create_openai_client()
 
 
 def read_md_file(file_path: str) -> str:
@@ -219,7 +219,7 @@ def generate_summary_ai(text: str, api_url: str = None, api_key: str = None, mod
     try:
         # 创建临时客户端
         temp_client = None
-        config = config.config_manager.load_config()
+        config = config_manager.load_config()
         active_provider = config.get("active_provider", "open-ai") if config else "open-ai"
         provider_config = config.get("providers", {}).get(active_provider, {}) if config else {}
         use_model = model or provider_config.get("default_model", "")
@@ -281,7 +281,7 @@ def generate_notes_ai(text: str, api_url: str = None, api_key: str = None, model
     try:
         # 创建临时客户端
         temp_client = None
-        config = config.config_manager.load_config()
+        config = config_manager.load_config()
         active_provider = config.get("active_provider", "open-ai") if config else "open-ai"
         provider_config = config.get("providers", {}).get(active_provider, {}) if config else {}
         use_model = model or provider_config.get("default_model", "")
@@ -359,7 +359,7 @@ def generate_outline_ai(text: str, api_url: str = None, api_key: str = None, mod
     try:
         # 创建临时客户端
         temp_client = None
-        config = config.config_manager.load_config()
+        config = config_manager.load_config()
         active_provider = config.get("active_provider", "open-ai") if config else "open-ai"
         provider_config = config.get("providers", {}).get(active_provider, {}) if config else {}
         use_model = model or provider_config.get("default_model", "")

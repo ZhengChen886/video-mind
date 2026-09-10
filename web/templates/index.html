@@ -1009,6 +1009,35 @@
         </div>
     </div>
     
+    <!-- 扫描本地文件夹模态框（RAG 改造） -->
+    <div class="modal-overlay" id="modalScanFolder">
+        <div class="modal" style="width:520px">
+            <div class="modal-header">
+                <span>添加本地文件夹</span>
+                <button class="modal-close" id="cancelScanFolder">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>本地文件夹绝对路径</label>
+                    <input type="text" id="scanFolderInput" placeholder="例如 F:\docs\my-notes">
+                </div>
+                <div class="form-group" style="display:flex;align-items:center;gap:8px;">
+                    <input type="checkbox" id="scanFolderForce" style="margin:0;">
+                    <label for="scanFolderForce" style="margin:0;">强制重新索引（默认跳过已索引文件）</label>
+                </div>
+                <div id="scan-folder-preview" class="scan-folder-preview" style="display:none;">
+                    <div class="scan-folder-summary" id="scan-folder-summary"></div>
+                    <div class="scan-folder-files" id="scan-folder-files"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelScanFolderBtn">取消</button>
+                <button class="btn btn-secondary" id="btn-do-scan" style="display:none;">扫描预览</button>
+                <button class="btn btn-primary" id="confirmScanFolder" disabled>扫描</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 重命名分组模态框 -->
     <div class="modal-overlay" id="modalRenameFolder">
         <div class="modal" style="width:450px">
@@ -1137,6 +1166,38 @@
                     </div>
                     <div id="chat-messages" class="chat-messages">
                         <div class="empty-hint">请先在左侧选择一个文档</div>
+                    </div>
+
+                    <!-- 多文档问答工具栏（RAG 改造） -->
+                    <div class="multi-doc-bar" id="multi-doc-bar">
+                        <div class="multi-doc-actions">
+                            <button type="button" class="btn-multidoc" id="btn-multiselect-toggle" title="在文件树中勾选多个文档进行跨文件问答">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="9 11 12 14 22 4"/>
+                                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                                </svg>
+                                <span>多选文档</span>
+                            </button>
+                            <button type="button" class="btn-multidoc" id="btn-add-folder" title="输入本地文件夹路径，扫描并批量索引">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                                </svg>
+                                <span>添加文件夹</span>
+                            </button>
+                            <button type="button" class="btn-multidoc" id="btn-collection-chat" title="对整个知识库的所有已索引文档提问">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <ellipse cx="12" cy="5" rx="9" ry="3"/>
+                                    <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+                                    <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+                                </svg>
+                                <span>全库问答</span>
+                            </button>
+                        </div>
+                        <!-- 已选文档列表 -->
+                        <div class="multi-doc-selected" id="multi-doc-selected" style="display:none;">
+                            <div class="multi-doc-selected-list" id="multi-doc-selected-list"></div>
+                            <button type="button" class="btn-multidoc-clear" id="btn-clear-selected-docs">清空</button>
+                        </div>
                     </div>
 
                     <!-- 输入区 -->

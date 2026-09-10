@@ -8,6 +8,8 @@ import * as Sidebar from './sidebar.js';
 import * as Chat from './chat.js';
 import * as DocPreview from './doc_preview.js';
 import * as TTS from './tts.js';
+import * as MultiDoc from './multi_doc.js';
+import * as ChatSteps from './chat_steps.js';
 import { showToast } from '../../core/utils.js';
 
 const state = {
@@ -21,6 +23,10 @@ const state = {
     expandedFolders: new Set(),
     searchQuery: '',
     sidebarCollapsed: false,
+    // 多文档问答（RAG 改造）
+    chatMode: 'single',        // 'single' | 'multi' | 'collection'
+    multiSelectMode: false,    // 文件树是否处于多选模式
+    selectedDocs: [],          // [{path, name}]
     // TTS
     ttsVoices: [],
     ttsSelectedVoice: 'zh-CN-XiaoxiaoNeural',
@@ -45,6 +51,8 @@ function injectCtx() {
     Chat.setChatCtx(ctx);
     DocPreview.setDocPreviewCtx(ctx);
     TTS.setTTSCtx(ctx);
+    MultiDoc.setMultiDocCtx(ctx);
+    ChatSteps.setChatStepsCtx(ctx);
 }
 
 const KnowledgeApp = {
@@ -107,8 +115,51 @@ const KnowledgeApp = {
                 Sidebar.confirmDeleteFolder(folderPath, folderName);
             }
             if (e.target.closest('.file-item')) {
-                const filePath = e.target.closest('.file-item').dataset.path;
+                const fileEl = e.target.closest('.file-item');
+                const filePath = fileEl.dataset.path;
+                const fileName = fileEl.dataset.name;
+                // 多选模式：点击切换勾选，不打开文档
+                if (state.multiSelectMode) {
+                    MultiDoc.toggleDocSelected(filePath, fileName);
+                    Sidebar.renderFileList();
+                    return;
+                }
+                // 点击具体文档时退出全库问答模式，回到单文档模式
+                if (state.chatMode === 'collection') {
+                    state.chatMode = 'single';
+                    MultiDoc.updateMultiDocBar();
+                }
                 DocPreview.selectDocument(filePath);
+            }
+            // 多文档工具栏（RAG 改造）
+            if (e.target.closest('#btn-multiselect-toggle')) {
+                MultiDoc.toggleMultiSelectMode();
+            }
+            if (e.target.closest('#btn-add-folder')) {
+                MultiDoc.showScanFolderDialog();
+            }
+            if (e.target.closest('#btn-collection-chat')) {
+                MultiDoc.toggleCollectionMode();
+            }
+            if (e.target.closest('#btn-clear-selected-docs')) {
+                MultiDoc.clearSelectedDocs();
+            }
+            if (e.target.closest('.doc-chip-remove')) {
+                const path = e.target.closest('.doc-chip-remove').dataset.path;
+                const doc = (state.selectedDocs || []).find(d => d.path === path);
+                if (doc) {
+                    MultiDoc.toggleDocSelected(doc.path, doc.name);
+                    Sidebar.renderFileList();
+                }
+            }
+            if (e.target.closest('#btn-do-scan')) {
+                MultiDoc.doScanFolder();
+            }
+            if (e.target.closest('#confirmScanFolder')) {
+                MultiDoc.confirmScanFolder();
+            }
+            if (e.target.closest('#cancelScanFolder') || e.target.closest('#cancelScanFolderBtn')) {
+                MultiDoc.closeScanFolderDialog();
             }
             if (e.target.closest('#btn-new-chat')) {
                 Chat.newConversation();

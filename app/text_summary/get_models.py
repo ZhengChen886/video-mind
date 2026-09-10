@@ -1,10 +1,10 @@
 
 import requests
-import config.config_manager
+import app.config.config_manager as config_manager
 
 
 def get_models():
-    config = config.config_manager.load_config()
+    config = config_manager.load_config()
     if not config:
         return {"error": "未找到配置文件"}
     
@@ -24,7 +24,7 @@ def get_models():
 
 
 def get_full_models():
-    config = config.config_manager.load_config()
+    config = config_manager.load_config()
     if not config:
         return {"error": "未找到配置文件"}
     

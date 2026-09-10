@@ -6,7 +6,7 @@ import shutil
 from pathlib import Path
 from typing import Dict, List, Optional
 import platform
-from config.paths import TTS_CACHE_DIR, TTS_AUDIO_DIR, TTS_TEMP_DIR
+from app.config.paths import TTS_CACHE_DIR, TTS_AUDIO_DIR, TTS_TEMP_DIR
 
 
 # 配置参数

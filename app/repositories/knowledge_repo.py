@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Dict, Any
-from config.paths import KNOWLEDGE_DIR, KNOWLEDGE_DATA_DIR
+from app.config.paths import KNOWLEDGE_DIR, KNOWLEDGE_DATA_DIR
 
 
 class KnowledgeRepository:
